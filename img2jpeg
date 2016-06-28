@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+
+set -euf -o pipefail
+
+#
+# Recompress image files to normal JPEGs at a specific quality setting
+#
+# I made this after betamaxing myself with hundreds of 35mm negs scanned in as
+# jpeg-2000 format.  Oops.  Probably lots of better implementations exist 
+# somewhere on the Internet but building my own was quicker.
+#
+# See http://stackoverflow.com/questions/7261855/recommendation-for-compressing-jpg-files-with-imagemagick#7262050 for inspiration.
+#
+
+
+IMCONVERT="convert"
+
+function show_help() {
+  cat << EOF
+
+Usage: ${0##*/} [-h] [-q quality] <INFILE> [INFILE...]
+
+Use ImageMagick to convert image files to .jpg at a given quality.
+
+    -h          display this help and exit
+    -q QUALITY  output <QUALITY>.  Default 85.
+    -s FACTOR   scale with factor %, e.g. 50, 75.  Don't append '%'.
+    -b          small gaussian blur to reduce noise/detail & therefore img size
+    -c          resample chroma channel; less obvious than blur; no noise reduct
+    -p          output progressive jpeg; slightly larger
+
+<INFILE>  an image file supported by your local ImageMagick.
+
+EOF
+}
+
+
+
+# Set variables
+quality="85"
+blur_opt=""
+qual_opt="-quality 85%"
+prog_opt=""
+rsam_opt=""
+scal_opt=""
+
+OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
+while getopts "hq:bpcs:" opt; do
+    case "$opt" in
+        h)
+            show_help
+            exit 0
+            ;;
+        q)  qual_opt="-quality ${OPTARG}%"
+            ;;
+        b)  blur_opt="-gaussian-blur 0.05"
+            ;;
+        p)
+            prog_opt="-interlace Plane"
+            ;;
+        c)  rsam_opt="-sampling-factor 4:2:0 -define jpeg:dct-method=float"
+            ;;
+        s)
+            scal_opt="-scale ${OPTARG}%"
+            ;;
+        '?')
+            show_help >&2
+            exit 1
+            ;;
+    esac
+done
+shift "$((OPTIND-1))" # Shift off the options and optional --.
+
+
+
+# Check convert actually present
+type $IMCONVERT >/dev/null 2>&1 || { echo >&2 "I require ${IMCONVERT} but it's not installed.  Aborting."; exit 1; }
+
+
+if [ $# -eq 0 ]; then
+    show_help >&2
+    exit 1
+fi
+
+
+
+cat <<EOF
+
+Converting with options...
+  
+  SCALE:       ${scal_opt}
+  BLUR:        ${blur_opt}
+  QUALITY:     ${qual_opt}
+  PROGRESSIVE: ${prog_opt}
+  RESAMPLING:  ${rsam_opt}
+  
+EOF
+
+
+# Use direct bash globbing to find targets
+for source in "$@"
+do
+    jpgdest="${source%.*}.jpg"
+    echo "${source} -> ${jpgdest}"
+    $IMCONVERT "${source}" ${prog_opt} ${blur_opt} ${scal_opt} ${rsam_opt} ${qual_opt} "${jpgdest}"
+done
+
+
+echo
