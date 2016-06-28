@@ -97,7 +97,7 @@ Converting with options...
 EOF
 
 
-# Use direct bash globbing to find targets
+# Loop over the arguments to convert all files
 for source in "$@"
 do
     jpgdest="${source%.*}.jpg"

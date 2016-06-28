@@ -7,20 +7,21 @@ set -euf -o pipefail
 #
 
 FFMPEG="ffmpeg"
+EXTENSION="x265.mp4"
 
 
 function show_help() {
   cat << EOF
 
-Usage: ${0##*/} [-h] [-b bitrate] <INFILE> <OUTFILE>
+Usage: ${0##*/} [-h] [-b bitrate] <INFILE> [INFILE...]
 
-Convert a video to hevc using ffmpeg.
+Convert videos to hevc using ffmpeg.  The resulting video has .mp4 container &
+is renamed to end with ${EXTENSION}.
 
     -h          display this help and exit
     -b BITRATE  write bitrate <BITRATE>.  Default 500k.  Must end in 'k'.
 
 <INFILE>  can be any video format supported by your local ffmpeg build
-<OUTFILE> must end in .mp4
 
 EOF
 }
@@ -28,6 +29,7 @@ EOF
 
 # Set variables...
 bitrate="500k"
+
 
 
 
@@ -48,7 +50,7 @@ while getopts "hb:" opt; do
 done
 shift "$((OPTIND-1))" # Shift off the options and optional --.
 
-if [ $# -ne 2 ]; then
+if [ $# -lt 1 ]; then
   show_help >&2
   exit 1
 fi
@@ -58,27 +60,23 @@ fi
 type $FFMPEG >/dev/null 2>&1 || { echo >&2 "I require ${FFMPEG} but it's not installed.  Aborting."; exit 1; }
 
 
-# Check correct output file extension
-if [[ ! "$2" =~ \.mp4$ ]]; then
-  echo >&2 "I output .mp4 files but you named it something else.  Aborting."
-  exit 1
-fi
-
-
-echo "Converting $1 -> $2 @ ${bitrate}"
+# Quiet: -hide_banner -loglevel error 
+# Subtitles: -scodec copy
+FFMPEG_OPTS="-hide_banner -loglevel fatal -stats -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -x265-params log-level=error"
 
 
 
-$FFMPEG -y -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
-$FFMPEG -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 2 "${2}"
+# Loop through all args
+for source in "$@"; do
+	dest="${source%.*}.${EXTENSION}"
+	echo "Converting $source -> $dest @ ${bitrate}"
+	$FFMPEG -y -i "${source}" ${FFMPEG_OPTS} -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
+	$FFMPEG -i    "${source}" ${FFMPEG_OPTS} -b:v ${bitrate} -pass 2 "${dest}"
+	rm -f ffmpeg2pass-0.log
+	ls -lh "${source}" "${dest}"
+done
 
 
-# Clean up first-pass data
-rm -f ffmpeg2pass-0.log
-
-
-ls -lh "${1}"
-ls -lh "${2}"
 
 echo
 
