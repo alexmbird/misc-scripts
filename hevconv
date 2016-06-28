@@ -62,7 +62,7 @@ type $FFMPEG >/dev/null 2>&1 || { echo >&2 "I require ${FFMPEG} but it's not ins
 
 # Quiet: -hide_banner -loglevel error 
 # Subtitles: -scodec copy
-FFMPEG_OPTS="-hide_banner -loglevel fatal -stats -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -x265-params log-level=error"
+FFMPEG_OPTS="-hide_banner -loglevel fatal -stats -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -x265-params log-level=error,no-slow-firstpass"
 
 
 
