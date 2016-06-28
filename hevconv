@@ -2,23 +2,31 @@
 
 set -euf -o pipefail
 
-
+#
 # Convert to hevc
+#
+
+FFMPEG="ffmpeg"
 
 
 function show_help() {
   cat << EOF
+
 Usage: ${0##*/} [-h] [-b bitrate] <INFILE> <OUTFILE>
 
-Convert a video to hevc.
+Convert a video to hevc using ffmpeg.
 
     -h          display this help and exit
     -b BITRATE  write bitrate <BITRATE>.  Default 500k.  Must end in 'k'.
+
+<INFILE>  can be any video format supported by your local ffmpeg build
+<OUTFILE> must end in .mp4
 
 EOF
 }
 
 
+# Set variables...
 bitrate="500k"
 
 
@@ -46,12 +54,23 @@ if [ $# -ne 2 ]; then
 fi
 
 
+# Check ffmpeg actually present
+type $FFMPEG >/dev/null 2>&1 || { echo >&2 "I require ${FFMPEG} but it's not installed.  Aborting."; exit 1; }
+
+
+# Check correct output file extension
+if [[ ! "$2" =~ \.mp4$ ]]; then
+  echo >&2 "I output .mp4 files but you named it something else.  Aborting."
+  exit 1
+fi
+
+
 echo "Converting $1 -> $2 @ ${bitrate}"
 
 
 
-ffmpeg -y -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
-ffmpeg -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 2 "${2}"
+$FFMPEG -y -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
+$FFMPEG -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 2 "${2}"
 
 
 # Clean up first-pass data
