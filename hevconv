@@ -1,0 +1,65 @@
+#!/bin/bash
+
+set -euf -o pipefail
+
+
+# Convert to hevc
+
+
+function show_help() {
+  cat << EOF
+Usage: ${0##*/} [-h] [-b bitrate] <INFILE> <OUTFILE>
+
+Convert a video to hevc.
+
+    -h          display this help and exit
+    -b BITRATE  write bitrate <BITRATE>.  Default 500k.  Must end in 'k'.
+
+EOF
+}
+
+
+bitrate="500k"
+
+
+
+OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
+while getopts "hb:" opt; do
+    case "$opt" in
+        h)
+            show_help
+            exit 0
+            ;;
+        b)  bitrate=$OPTARG
+            ;;
+        '?')
+            show_help >&2
+            exit 1
+            ;;
+    esac
+done
+shift "$((OPTIND-1))" # Shift off the options and optional --.
+
+if [ $# -ne 2 ]; then
+  show_help >&2
+  exit 1
+fi
+
+
+echo "Converting $1 -> $2 @ ${bitrate}"
+
+
+
+ffmpeg -y -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
+ffmpeg -i "${1}" -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -b:v ${bitrate} -pass 2 "${2}"
+
+
+# Clean up first-pass data
+rm -f ffmpeg2pass-0.log
+
+
+ls -lh "${1}"
+ls -lh "${2}"
+
+echo
+
