@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -euf -o pipefail
+
+# Run a command on every LXC container present on this host
+
+for c in `lxc-ls`; do
+  echo $c
+  lxc-attach -n $c -- "$@"
+done
+
+
