@@ -93,7 +93,7 @@ function sleep_until_economy7() {
 		fi
 		! test $printed && echo -e "Hour $hour not within economy 7 period of $ECONOMY7_START - $ECONOMY7_END; sleeping\n"
 		printed='yes'
-		sleep 1
+		sleep 30
 	done
 }
 
