@@ -10,6 +10,13 @@ FFMPEG="ffmpeg"
 EXTENSION="x265.mp4"
 
 
+# With -7 switch, commence a new encoding only between these times to save
+# energy.  See https://en.wikipedia.org/wiki/Economy_7.
+ECONOMY7_START=23
+ECONOMY7_END=6
+
+
+
 function show_help() {
   cat << EOF
 
@@ -20,7 +27,8 @@ is renamed to end with ${EXTENSION}.
 
     -h          display this help and exit
     -b BITRATE  write bitrate <BITRATE>.  Default 500k.  Must end in 'k'.
-
+    -7          only begin processing within economy 7 period to save £££
+    
 <INFILE>  can be any video format supported by your local ffmpeg build
 
 EOF
@@ -29,12 +37,12 @@ EOF
 
 # Set variables...
 bitrate="500k"
-
+economy7=''
 
 
 
 OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
-while getopts "hb:" opt; do
+while getopts "hb:7" opt; do
     case "$opt" in
         h)
             show_help
@@ -42,6 +50,9 @@ while getopts "hb:" opt; do
             ;;
         b)  bitrate=$OPTARG
             ;;
+        7)
+        	economy7=1
+        	;;
         '?')
             show_help >&2
             exit 1
@@ -51,9 +62,41 @@ done
 shift "$((OPTIND-1))" # Shift off the options and optional --.
 
 if [ $# -lt 1 ]; then
-  show_help >&2
-  exit 1
+	show_help >&2
+	exit 1
 fi
+
+
+# Sanity check of econonmy 7 times
+if [ $ECONOMY7_START == $ECONOMY7_END ]; then
+    echo >&2 "Economy 7 start & end times must be different!"
+    exit 1
+fi
+
+
+
+
+# Only process with cheap electricity: block until we are within the
+# economy 7 period
+function sleep_until_economy7() {
+	printed=''
+	while [ 1 ]; do
+		hour=`date -u +%H`
+		if [ $ECONOMY7_START -lt $ECONOMY7_END ]; then
+			if [ $hour -ge $ECONOMY7_START -a $hour -lt $ECONOMY7_END ]; then
+				return # yes
+			fi
+		else
+		    if [ $hour -ge $ECONOMY7_START -o $hour -lt $ECONOMY7_END ]; then
+		    	return # yes
+		    fi
+		fi
+		! test $printed && echo -e "Hour $hour not within economy 7 period of $ECONOMY7_START - $ECONOMY7_END; sleeping\n"
+		printed='yes'
+		sleep 1
+	done
+}
+
 
 
 # Check ffmpeg actually present
@@ -62,12 +105,14 @@ type $FFMPEG >/dev/null 2>&1 || { echo >&2 "I require ${FFMPEG} but it's not ins
 
 # Quiet: -hide_banner -loglevel error 
 # Subtitles: -scodec copy
-FFMPEG_OPTS="-hide_banner -loglevel fatal -stats -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -x265-params log-level=error,no-slow-firstpass"
+# Unused -x265-params: no-slow-firstpass
+FFMPEG_OPTS="-hide_banner -loglevel fatal -stats -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -x265-params log-level=error"
 
 
 
 # Loop through all args
 for source in "$@"; do
+	test $economy7 && sleep_until_economy7
 	dest="${source%.*}.${EXTENSION}"
 	echo "Converting $source -> $dest @ ${bitrate}"
 	$FFMPEG -y -i "${source}" ${FFMPEG_OPTS} -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
