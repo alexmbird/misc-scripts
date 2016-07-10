@@ -49,3 +49,9 @@ $ on-all-lxc apt-get -y -qq update
 container1 output...
 container2 output...
 ```
+
+
+### borgmeup
+
+A wrapper script around the [borg](http://borgbackup.readthedocs.io/) backup tool to automate daily/weekly/monthly backups with automatic pruning of outdated archives.
+

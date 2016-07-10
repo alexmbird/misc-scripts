@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+
+set -euf -o pipefail
+
+#
+# A wrapper script around Borg to automate backing up various things from your
+# filesystem.  This greatly simplifies calling borg from a crontab entry.
+# See https://borgbackup.readthedocs.io/
+#
+
+
+
+# Where am your borg?
+BORG='/usr/bin/borg'
+
+# Passed to `borg create`
+BORG_CREATE_OPTS='-v'
+BORG_PRUNE_OPTS='-v'
+BORG_DELETE_OPTS='-v'
+
+# Where am your shit?
+REPOSITORY='myuser@my.target.host:borg'
+
+# If your key is protected with a passphrase, we must be able to find it
+PASSPHRASE_FILE="/root/.config/borg/passphrase"
+
+# Finally declare all your targets
+# in the <<TARGETS>> section below.
+
+
+function show_help() {
+  cat << EOF
+
+Usage: ${0##*/} [-h] <MODE>
+
+Wrapper script around borg to simplify the job of making a backup.
+
+    -h          display this help and exit
+
+MODE must be one of:
+    
+    help    - display this help and exit
+    list    - list existing archives in your repository
+
+    daily   - make a 'daily' backup and prune old ones
+    weekly  - make a 'weekly' backup and prune old ones
+    monthly - make a 'monthly' backup and prune old ones
+
+    delete <x> [<y>...] - delete existing archives from repository
+    
+Presently working on repo ${REPOSITORY}
+
+EOF
+}
+
+
+
+
+
+# Handle command line args
+OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
+while getopts "h" opt; do
+    case "$opt" in
+        h)
+            show_help
+            exit 0
+            ;;
+        '?')
+            show_help >&2
+            exit 1
+            ;;
+    esac
+done
+shift "$((OPTIND-1))" # Shift off the options and optional --.
+
+if [ $# -lt 1 ]; then
+	show_help >&2
+	exit 1
+fi
+
+
+
+if [ "$PASSPHRASE_FILE" != '' ]; then
+    if ! [ -r "$PASSPHRASE_FILE" ]; then
+        echo >&2 "Can't read passphrase from $PASSPHRASE_FILE"
+        exit 1
+    else
+    	export BORG_PASSPHRASE=`cat $PASSPHRASE_FILE`
+    fi
+fi
+
+
+
+
+mode="$1"
+case "$mode" in
+	help)
+        show_help
+        exit 0
+        ;;
+    list)
+        ${BORG} list ${REPOSITORY}
+        exit 0
+        ;;
+    delete)
+        shift
+        for to_del in "$@"; do
+            echo "About to delete ${to_del}"
+            ${BORG} delete ${BORG_DELETE_OPTS} ${REPOSITORY}::$to_del
+        done
+        exit 0
+        ;;
+	daily)
+        archive_prefix='daily_'
+        ;;
+	weekly)
+        archive_prefix='weekly_'
+        ;;
+	monthly)
+        archive_prefix='monthly_'
+        ;;
+	*)
+        show_help >&2
+        exit 1
+        ;;
+esac
+
+
+
+# Archive names will be suffixed with this
+date_suffix=`date +%Y-%m-%d`
+
+
+
+# <<TARGETS>> section.
+# This is the only place you need to declare your targets.
+${BORG} create ${BORG_CREATE_OPTS} \
+    ${REPOSITORY}::${archive_prefix}mocky_photos_${date_suffix} \
+    /tank/mocky/photos
+
+${BORG} create ${BORG_CREATE_OPTS} --compression zlib,5 \
+    ${REPOSITORY}::${archive_prefix}mocky_history_${date_suffix} \
+    /tank/mocky/history
+    
+${BORG} create ${BORG_CREATE_OPTS} --compression zlib,5 \
+    ${REPOSITORY}::${archive_prefix}mocky_machines_${date_suffix} \
+    /tank/mocky/machines
+    
+${BORG} create ${BORG_CREATE_OPTS} \
+    ${REPOSITORY}::${archive_prefix}media_audio_${date_suffix} \
+    /tank/media/audio
+    
+${BORG} create ${BORG_CREATE_OPTS} --compression zlib,5 \
+    ${REPOSITORY}::${archive_prefix}behemoth_lxc_${date_suffix} \
+    /var/lib/lxc
+    
+${BORG} create ${BORG_CREATE_OPTS} --compression zlib,5 \
+    ${REPOSITORY}::${archive_prefix}mocky_sync_${date_suffix} \
+    /tank/mocky/sync
+    
+${BORG} create ${BORG_CREATE_OPTS} --compression zlib,5 \
+    ${REPOSITORY}::${archive_prefix}behemoth_root_${date_suffix} \
+    /etc /usr/local /srv /opt /var/spool /var/log /home
+
+
+
+
+#
+# All done.  Do we need to prune?
+#
+case "$mode" in
+    daily)
+        ${BORG} prune ${BORG_PRUNE_OPTS} --stats --prefix ${archive_prefix} \
+          --keep-within 2w --keep-daily 14 ${REPOSITORY}
+        ;;
+	weekly)
+        ${BORG} prune ${BORG_PRUNE_OPTS} --stats --prefix ${archive_prefix} \
+          --keep-within 3w --keep-weekly 8 ${REPOSITORY}
+        ;;
+	monthly)
+        ${BORG} prune ${BORG_PRUNE_OPTS} --stats --prefix ${archive_prefix} \
+          --keep-within 2m --keep-monthly 12 ${REPOSITORY}
+        ;;
+	*)
+        ;;
+esac
+
+
+
+# Finally print some stats...
+${BORG} list --prefix ${archive_prefix} ${REPOSITORY}
