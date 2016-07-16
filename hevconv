@@ -20,14 +20,15 @@ ECONOMY7_END=6
 function show_help() {
   cat << EOF
 
-Usage: ${0##*/} [-h] [-b bitrate] <INFILE> [INFILE...]
+Usage: ${0##*/} [-h] [options] <INFILE> [INFILE...]
 
 Convert videos to hevc using ffmpeg.  The resulting video has .mp4 container &
 is renamed to end with ${EXTENSION}.
 
-    -h          display this help and exit
-    -b BITRATE  write bitrate <BITRATE>.  Default 500k.  Must end in 'k'.
-    -7          only begin processing within economy 7 period to save £££
+    -h           display this help and exit
+    -b BITRATE   write bitrate <BITRATE>.  Default 500k.  Must end in 'k'.
+    -f FRAMERATE re-encode with framerate <FRAMERATE>, in fps
+    -7           only begin processing within economy 7 period to save £££
     
 <INFILE>  can be any video format supported by your local ffmpeg build
 
@@ -38,11 +39,12 @@ EOF
 # Set variables...
 bitrate="500k"
 economy7=''
+framerate=''
 
 
 
 OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
-while getopts "hb:7" opt; do
+while getopts "hb:f:7" opt; do
     case "$opt" in
         h)
             show_help
@@ -50,9 +52,11 @@ while getopts "hb:7" opt; do
             ;;
         b)  bitrate=$OPTARG
             ;;
+        f)  framerate=$OPTARG
+            ;;
         7)
-        	economy7=1
-        	;;
+            economy7=1
+            ;;
         '?')
             show_help >&2
             exit 1
@@ -109,14 +113,21 @@ type $FFMPEG >/dev/null 2>&1 || { echo >&2 "I require ${FFMPEG} but it's not ins
 FFMPEG_OPTS="-hide_banner -loglevel fatal -stats -c:a copy -bsf:a aac_adtstoasc -c:v hevc -preset medium -x265-params log-level=error"
 
 
+if [[ "$framerate" != '' ]]; then
+  FRAMERATE_OPT="-r ${framerate}"
+else
+  FRAMERATE_OPT=""
+fi
+
+
 
 # Loop through all args
 for source in "$@"; do
 	test $economy7 && sleep_until_economy7
 	dest="${source%.*}.${EXTENSION}"
 	echo "Converting $source -> $dest @ ${bitrate}"
-	$FFMPEG -y -i "${source}" ${FFMPEG_OPTS} -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
-	$FFMPEG -i    "${source}" ${FFMPEG_OPTS} -b:v ${bitrate} -pass 2 "${dest}"
+	$FFMPEG -y -i "${source}" ${FFMPEG_OPTS} $FRAMERATE_OPT -b:v ${bitrate} -pass 1 -f mp4 /dev/null && \
+	$FFMPEG -i    "${source}" ${FFMPEG_OPTS} $FRAMERATE_OPT -b:v ${bitrate} -pass 2 "${dest}"
 	rm -f ffmpeg2pass-0.log
 	ls -lh "${source}" "${dest}"
 done
