@@ -9,7 +9,6 @@ set -euf -o pipefail
 #
 
 
-
 # Where am your borg?
 BORG='/usr/bin/borg'
 
@@ -175,11 +174,11 @@ case "$mode" in
         ;;
 	weekly)
         ${BORG} prune ${BORG_PRUNE_OPTS} --stats --prefix ${archive_prefix} \
-          --keep-within 3w --keep-weekly 8 ${REPOSITORY}
+          --keep-within 4w --keep-weekly 8 ${REPOSITORY}
         ;;
 	monthly)
         ${BORG} prune ${BORG_PRUNE_OPTS} --stats --prefix ${archive_prefix} \
-          --keep-within 2m --keep-monthly 12 ${REPOSITORY}
+          --keep-within 3m --keep-monthly 12 ${REPOSITORY}
         ;;
 	*)
         ;;
