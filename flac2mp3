@@ -92,7 +92,7 @@ function transcode() {
     
     # Why the </dev/null ?  - to stop ffmpeg printing an "Enter command" prompt
     # because it thinks it's running in interactive mode.
-    ${avconv} -loglevel quiet -y -i "${t_source}" \
+    ${avconv} -loglevel error -y -i "${t_source}" \
       -c:v copy \
       -codec:a libmp3lame -q:a "${lame_vbr_quality}" \
       -map_metadata 0 -id3v2_version 3 -write_id3v1 1  "${t_dest}" \
