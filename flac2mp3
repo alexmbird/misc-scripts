@@ -127,7 +127,7 @@ for source in "$@"; do
             else
                 cp -vr "${f}" "${destdir}/${filename}"
             fi
-        done < <(find  "${source}" -mindepth 1 -print0)
+        done < <(find  "${source}" -not -path '*/\.*' -mindepth 1 -print0)
         echo -n "Done: "
         du -h "${destdir}"
     elif [ -f "${source}" ] && [[ "${source}" == *.flac ]]; then
@@ -141,4 +141,6 @@ done
 
 # Why the bizarre way of listing files?  Because bash makes it very hard to
 # handle filenames with spaces in.  `find` does this correctly, so we get it to
-# print a null-separated list to stdout and iterate over that.
+# print a null-separated list to stdout and iterate over that.  Also ignores
+# hidden files since they are usually OSX/Windows metadata, not real audio.
+
