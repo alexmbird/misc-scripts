@@ -127,7 +127,7 @@ for source in "$@"; do
             else
                 cp -vr "${f}" "${destdir}/${filename}"
             fi
-        done < <(find  "${source}" -not -path '*/\.*' -mindepth 1 -print0)
+        done < <(find  "${source}" -mindepth 1 -not -path '*/\.*' -print0)
         echo -n "Done: "
         du -h "${destdir}"
     elif [ -f "${source}" ] && [[ "${source}" == *.flac ]]; then
