@@ -64,4 +64,8 @@ Convert individual flac files or a directory full of them into mp3s using ffmpeg
 *  Preserves cover art &amp; other files 
 *  ...but does not preserve `.cur` and `.log` files, since they belong in flac-land
 
+You know when you start writing a tool to do a simple job, only three hours later it turns out not to be simple and you really wish you'd used Python?  That.
 
+Potential improvements:
+
+*  Lame is singlethreaded and nowadays everything is multicore.  Since albums consist of many tracks, speed things up by getting [GNU Parallel](https://www.gnu.org/software/parallel/) to transcode N files at once.

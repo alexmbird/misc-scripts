@@ -88,7 +88,7 @@ fi
 function transcode() {
     t_source="${1}"
     t_dest="${2}"
-    echo "${t_source} --> ${t_dest}"
+    echo "'${t_source}' ==> '${t_dest}'"
     
     # Why the </dev/null ?  - to stop ffmpeg printing an "Enter command" prompt
     # because it thinks it's running in interactive mode.
