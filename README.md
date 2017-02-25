@@ -55,3 +55,13 @@ container2 output...
 
 A wrapper script around the [borg](http://borgbackup.readthedocs.io/) backup tool to automate daily/weekly/monthly backups with automatic pruning of outdated archives.
 
+
+### flac2mp3
+
+Convert individual flac files or a directory full of them into mp3s using ffmpeg/avconv.
+
+*  Preserves metadata
+*  Preserves cover art &amp; other files 
+*  ...but does not preserve `.cur` and `.log` files, since they belong in flac-land
+
+

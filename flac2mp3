@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+set -euf -o pipefail
+
+AVCONV="avconv"   # might also be ffmpeg
+LAME_VBR_QUALITY="3"
+
+
+
+function show_help() {
+  cat << EOF
+
+Usage: ${0##*/} [-h] [options] <INFILE> [INFILE...]
+
+Convert FLAC to mp3 using avconv.  VBR with high quality settings.  Handle dirs
+by creating a copy version of the directory (ending in '[mp3]') with all non-
+audio files preserved but flacs replaced by mp3s.  ID3 tags are preserved.
+
+    -h           display this help and exit
+    -a <path>    path to avconv/ffmpeg binary
+    -q <qual>    set lame vbr quality; default is 3
+    
+Example 1: transcode to files duck.mp3 and owl.mp3, preserving originals.
+  
+  ${0##*/} duck.flac owl.flac
+
+
+Example 2: create a new directory, 'ducks_album [mp3]', with flacs transcoded
+to mp3 and all other files (e.g. album art) copied over.
+
+  ${0##*/} ducks_album  # ducks_album is a directory
+
+Lame VBR quality setting:
+
+Qual | Avg kbit/s | Bitrate range kbit/s 
+-----+------------|------------------------
+0 	 | 245 	      | 220-260
+1 	 | 225 	      | 190-250
+2 	 | 190 	      | 170-210
+3 	 | 175 	      | 150-195
+4 	 | 165 	      | 140-185
+5 	 | 130        | 120-150
+6 	 | 115        | 100-130
+7 	 | 100 	      | 80-120
+8 	 | 85 	      | 70-105
+9 	 | 65 	      | 45-85
+    
+EOF
+}
+
+
+# Set defaults
+avconv="${AVCONV}"
+lame_vbr_quality="${LAME_VBR_QUALITY}"
+
+
+
+OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
+while getopts "ha:q:" opt; do
+    case "$opt" in
+        h)
+            show_help
+            exit 0
+            ;;
+        a)
+            avconv="${OPTARG}"
+            echo >>/dev/stderr "Using alternative avconv ${avconv}"
+            ;;
+        q)
+            lame_vbr_quality="${OPTARG}"
+            echo >>/dev/stderr "Using alternative VBR quality of ${lame_vbr_quality}"
+            ;;
+        '?')
+            show_help >&2
+            exit 1
+            ;;
+    esac
+done
+shift "$((OPTIND-1))" # Shift off the options and optional --.
+
+if [ $# -lt 1 ]; then
+        show_help >&2
+        exit 1
+fi
+
+
+
+function transcode() {
+    t_source="${1}"
+    t_dest="${2}"
+    echo "${t_source} --> ${t_dest}"
+    
+    # Why the </dev/null ?  - to stop ffmpeg printing an "Enter command" prompt
+    # because it thinks it's running in interactive mode.
+    ${avconv} -loglevel quiet -y -i "${t_source}" \
+      -c:v copy \
+      -codec:a libmp3lame -q:a "${lame_vbr_quality}" \
+      -map_metadata 0 -id3v2_version 3 -write_id3v1 1  "${t_dest}" \
+      </dev/null
+}
+
+
+# Check avconv actually present
+type ${avconv} >/dev/null 2>&1 || { echo >&2 "I require ${avconv} but it's not installed.  Aborting."; exit 1; }
+
+# set -x    # debugging
+for source in "$@"; do
+    # printf '=%.0s' {1..78}
+    source="${source%/}"   # Strip dangerous trailing slash from dirs
+    if [ -d "${source}" ]; then   # Convert a whole directory
+        destdir="${source} [mp3]"
+        echo "Converting whole dir to ${destdir}"
+        if [ -d "${destdir}" ]; then
+            echo >>/dev/stderr "${destdir} already exists; won't clobber it"
+            exit 1
+        else
+            mkdir -p "${destdir}"
+        fi
+        while IFS= read -d $'\0' -r f ; do  # see note
+            filename=`basename "${f}"`
+            if [[ "${filename}" == *.flac ]]; then
+                transcode "${f}" "${destdir}/${filename%.*}.mp3"
+            elif [[ "${filename}" == *.cue ]]; then
+                echo "Skipping ${filename}"
+            elif [[ "${filename}" == *.log ]]; then
+                echo "Skipping ${filename}"
+            else
+                cp -vr "${f}" "${destdir}/${filename}"
+            fi
+        done < <(find  "${source}" -mindepth 1 -print0)
+        echo -n "Done: "
+        du -h "${destdir}"
+    elif [ -f "${source}" ] && [[ "${source}" == *.flac ]]; then
+        transcode "${source}" "${source%.*}.mp3"
+    else
+        echo >>/dev/stderr "${source} is neither a flac nor a directory.  Can't help you."
+        exit 1
+    fi
+done
+
+
+# Why the bizarre way of listing files?  Because bash makes it very hard to
+# handle filenames with spaces in.  `find` does this correctly, so we get it to
+# print a null-separated list to stdout and iterate over that.
