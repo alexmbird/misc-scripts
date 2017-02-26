@@ -60,12 +60,10 @@ A wrapper script around the [borg](http://borgbackup.readthedocs.io/) backup too
 
 Convert individual flac files or a directory full of them into mp3s using ffmpeg/avconv.
 
-*  Preserves metadata
+*  Preserves tags &amp; filesystem metadata
 *  Preserves cover art &amp; other files 
 *  ...but does not preserve `.cur` and `.log` files, since they belong in flac-land
+*  LAME is singlethreaded, so uses a Python ThreadPool to run as many in parallel as you have cores for a huge speedup.
 
-You know when you start writing a tool to do a simple job, only three hours later it turns out not to be simple and you really wish you'd used Python?  That.
+Requires Python 3.4+.
 
-Potential improvements:
-
-*  Lame is singlethreaded and nowadays everything is multicore.  Since albums consist of many tracks, speed things up by getting [GNU Parallel](https://www.gnu.org/software/parallel/) to transcode N files at once.

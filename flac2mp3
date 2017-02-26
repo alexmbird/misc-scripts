@@ -1,146 +1,254 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python3
 
-set -euf -o pipefail
+import os, sys
+import argparse
+import subprocess
+import shutil
+from multiprocessing.pool import ThreadPool
+import re
 
-AVCONV="avconv"   # might also be ffmpeg
-LAME_VBR_QUALITY="3"
+
+"""Transcode FLAC audio to mp3, with user-configurable quality and intelligent
+directory handling.  Metadata will be preserved at both the audio and filesystem
+levels."""
+
+# Binary names we might expect to find ffmpeg/avconv with
+AVCONV_NAMES = ('avconv', 'ffmpeg')
+
+
+# These are meaningless after transcoding; don't copy them
+NO_COPY_EXTS = ('.log', '.cue')
 
 
 
-function show_help() {
-  cat << EOF
 
-Usage: ${0##*/} [-h] [options] <INFILE> [INFILE...]
 
-Convert FLAC to mp3 using avconv.  VBR with high quality settings.  Handle dirs
-by creating a copy version of the directory (ending in '[mp3]') with all non-
-audio files preserved but flacs replaced by mp3s.  ID3 tags are preserved.
 
-    -h           display this help and exit
-    -a <path>    path to avconv/ffmpeg binary
-    -q <qual>    set lame vbr quality; default is 3
+def autodetect_avconv(force=None):
+    """Search $PATH to find an avconv/ffmpeg binary
     
-Example 1: transcode to files duck.mp3 and owl.mp3, preserving originals.
-  
-  ${0##*/} duck.flac owl.flac
-
-
-Example 2: create a new directory, 'ducks_album [mp3]', with flacs transcoded
-to mp3 and all other files (e.g. album art) copied over.
-
-  ${0##*/} ducks_album  # ducks_album is a directory
-
-Lame VBR quality setting:
-
-Qual | Avg kbit/s | Bitrate range kbit/s 
------+------------|------------------------
-0    | 245        | 220-260
-1    | 225        | 190-250
-2    | 190        | 170-210
-3    | 175        | 150-195
-4    | 165        | 140-185
-5    | 130        | 120-150
-6    | 115        | 100-130
-7    | 100        | 80-120
-8    | 85         | 70-105
-9    | 65         | 45-85
+    Args:
+        None
     
-EOF
-}
-
-
-# Set defaults
-avconv="${AVCONV}"
-lame_vbr_quality="${LAME_VBR_QUALITY}"
-
-
-
-OPTIND=1 # Reset is necessary if getopts was used previously in the script.  It is a good idea to make this local in a function.
-while getopts "ha:q:" opt; do
-    case "$opt" in
-        h)
-            show_help
-            exit 0
-            ;;
-        a)
-            avconv="${OPTARG}"
-            echo >>/dev/stderr "Using alternative avconv ${avconv}"
-            ;;
-        q)
-            lame_vbr_quality="${OPTARG}"
-            echo >>/dev/stderr "Using alternative VBR quality of ${lame_vbr_quality}"
-            ;;
-        '?')
-            show_help >&2
-            exit 1
-            ;;
-    esac
-done
-shift "$((OPTIND-1))" # Shift off the options and optional --.
-
-if [ $# -lt 1 ]; then
-        show_help >&2
-        exit 1
-fi
-
-
-
-function transcode() {
-    t_source="${1}"
-    t_dest="${2}"
-    echo "'${t_source}' ==> '${t_dest}'"
+    Raises:
+        IOError - Couldn't find any executable avconv/ffmpeg
     
-    # Why the </dev/null ?  - to stop ffmpeg printing an "Enter command" prompt
-    # because it thinks it's running in interactive mode.
-    ${avconv} -loglevel error -y -i "${t_source}" \
-      -c:v copy \
-      -codec:a libmp3lame -q:a "${lame_vbr_quality}" \
-      -map_metadata 0 -id3v2_version 3 -write_id3v1 1  "${t_dest}" \
-      </dev/null
-}
+    Returns:
+        string location of binary
+    """
+    def _match(f):
+        return os.path.isfile(f) and os.access(f, os.X_OK)
+    def _find(paths, matchFunc=os.path.isfile):
+        for dirname in os.getenv('PATH', '').split(':'):
+            for p in paths:
+                candidate = os.path.join(dirname, p)
+                # print("Testing {}".format(candidate))
+                if matchFunc(candidate):
+                    return candidate
+        raise IOError("Can't find executables for {}".format('/'.join(paths)))
+    if force is not None:
+        if not _match(force):
+            raise IOError("Forced avconv binary {} is missing/noexec".format(force))
+        return force
+    else:
+        return _find(AVCONV_NAMES, _match)
 
 
-# Check avconv actually present
-type ${avconv} >/dev/null 2>&1 || { echo >&2 "I require ${avconv} but it's not installed.  Aborting."; exit 1; }
 
-# set -x    # debugging
-for source in "$@"; do
-    # printf '=%.0s' {1..78}
-    source="${source%/}"   # Strip dangerous trailing slash from dirs
-    if [ -d "${source}" ]; then   # Convert a whole directory
-        destdir="${source} [mp3]"
-        echo "Converting whole dir to ${destdir}"
-        if [ -d "${destdir}" ]; then
-            echo >>/dev/stderr "${destdir} already exists; won't clobber it"
-            exit 1
-        else
-            mkdir -p "${destdir}"
-        fi
-        while IFS= read -d $'\0' -r f ; do  # see note
-            filename=`basename "${f}"`
-            if [[ "${filename}" == *.flac ]]; then
-                transcode "${f}" "${destdir}/${filename%.*}.mp3"
-            elif [[ "${filename}" == *.cue ]]; then
-                echo "Skipping ${filename}"
-            elif [[ "${filename}" == *.log ]]; then
-                echo "Skipping ${filename}"
-            else
-                cp -vr "${f}" "${destdir}/${filename}"
-            fi
-        done < <(find  "${source}" -mindepth 1 -not -path '*/\.*' -print0)
-        echo -n "Done: "
-        du -h "${destdir}"
-    elif [ -f "${source}" ] && [[ "${source}" == *.flac ]]; then
-        transcode "${source}" "${source%.*}.mp3"
-    else
-        echo >>/dev/stderr "${source} is neither a flac nor a directory.  Can't help you."
-        exit 1
-    fi
-done
+def subp_transcode(f_source, f_dest, avconv='/usr/local/bin/ffmpeg', lame_vbr_quality=3):
+    """Use avconv/ffmpeg to transcode a flac file into an mp3 with the supplied
+    quality settings.
+    
+    Args:
+        f_source:         source file, which must be flac
+        f_dest:           dest file, which must be mp3
+        avconv:           path to avconv/ffmpeg binary
+        lame_vbr_quality: VBR setting passed to encoder.  0 is best.
+    
+    Raises:
+        TypeError:  f_source or f_dest wasn't a string
+        ValueError: supplied sources were of the wrong file type
+        IOError:    dest path is not a directory / couldn't be created
+        
+    Returns:
+        Tuple of (f_source, success, output)
+    """
+    # print("In subp_transcode()")
+    # print("  SRC '{}'".format(f_source))
+    # print("  DST '{}'".format(f_dest))
+    if not isinstance(f_source, str):
+        raise TypeError("f_source must be a str")
+    if not isinstance(f_dest, str):
+        raise TypeError("f_dest must be a str")
+    if not f_source.lower().endswith('.flac'):
+        raise ValueError("Can only transcode from flac files, not '{}'".format(f_source))
+    if not f_dest.lower().endswith('.mp3'):
+        raise ValueError("Can only transcode to mp3 files, not '{}'".format(f_dest))
+    p_args = [
+        avconv,
+        '-y',
+        '-i', f_source,
+        '-loglevel', 'error',
+        '-c:v', 'copy',
+        '-codec:a', 'libmp3lame',
+        '-q:a', str(lame_vbr_quality),
+        '-map_metadata', '0',
+        '-id3v2_version', '3',
+         '-write_id3v1', '1',
+        f_dest
+    ]
+    # print("'{}' => '{}'".format(f_source, f_dest))
+    # Rewrite this to use subprocess.run() once Python 3.5 is more common
+    try:
+        output = subprocess.check_output(
+            p_args,
+            stdin=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT
+        )
+    except CalledProcessError as e:
+        return (f_source, False, e.output)
+    finally:
+        if os.path.isfile(f_dest):
+            shutil.copystat(f_source, f_dest)
+    return (f_source, True, output)
 
 
-# Why the bizarre way of listing files?  Because bash makes it very hard to
-# handle filenames with spaces in.  `find` does this correctly, so we get it to
-# print a null-separated list to stdout and iterate over that.  Also ignores
-# hidden files since they are usually OSX/Windows metadata, not real audio.
+def destdir_name(d_source):
+    """Generate a destination directory name for the converted album, with
+    'mp3' somewhere in it.
+    
+    Args:
+        d_source: string directory name
+    
+    Returns:
+        string to use for a new directory name
+    """
+    source_dir_dir  = os.path.dirname(d_source)
+    source_dir_name = os.path.basename(d_source)
+    if '[flac]' in source_dir_name.lower():
+        new_dir_name = re.sub(r'\[flac\]', '[mp3]', source_dir_name, re.IGNORECASE)
+    elif '(flac)' in source_dir_name.lower():
+        new_dir_name = re.sub(r'\(flac\)', '(mp3)', source_dir_name, re.IGNORECASE)
+    else:
+        new_dir_name = "{} [mp3]".format(source_dir_name)
+    return os.path.join(source_dir_dir, new_dir_name)
+
+
+    
+def jobs(source, clobber=False):
+    """Yield a stream of jobs to do for a given file/album.  Create dest
+    dir if necessary.
+    
+    Args:
+        source: 
+    
+    Raises:
+        IOError: source is not a directory or flac file
+    
+    Yields:
+        Tuples of (type, f_source, f_dest) where 'type' is one of 't' for
+        transcode or 'c' for copy, f_source is the path to be copied and f_dest
+        is where it ends up.
+    """
+    if os.path.isfile(source) and source.lower().endswith('.flac'):
+        yield (     't',
+                    source,
+                    re.sub(r'\.flac$', '.mp3', source, re.IGNORECASE)
+        )
+    elif os.path.isdir(source):
+        d_dest = destdir_name(source)
+        if os.path.exists(d_dest):
+            if clobber:
+                print("Dest dir '{}' already exists; deleting".format(d_dest))
+                shutil.rmtree(d_dest)
+            else:
+                raise IOError("Dest dir '{}' already exists; won't clobber".format(d_dest))
+        os.makedirs(d_dest, exist_ok=True)
+        shutil.copystat(source, d_dest)
+        for path in os.listdir(source):
+            f_source = os.path.join(source, path)
+            if path.startswith('.'):
+                continue
+            elif path.lower().endswith(NO_COPY_EXTS):
+                continue
+            elif os.path.isfile(f_source) and path.lower().endswith('.flac'):
+                yield (     't',
+                            f_source,
+                            os.path.join(
+                                d_dest,
+                                re.sub(r'\.flac$', '.mp3', path, re.IGNORECASE)
+                            )
+                )
+            else:
+                yield (     'c', 
+                            f_source,
+                            os.path.join(d_dest, path)
+                )
+    else:
+        raise IOError("Target '{}' was neither a flac file nor directory")
+
+
+    
+    
+parser = argparse.ArgumentParser(description="""Transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""")
+parser.add_argument('sources', metavar='SOURCE', type=str, nargs='*',
+                    help='flac files or album dirs to transcode')
+parser.add_argument('--delete', '-d', action='store_const', 
+                    const=True, default=False,
+                    help="delete any existing destination dirs")
+parser.add_argument('--avconv', '-a', type=str,
+                    help='force avconv/ffmpeg binary')
+parser.add_argument('--quality', '-q', type=int, action='store',
+                    default=3,
+                    help='LAME VBR quality setting - 0 is best')
+                    
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+    avconv = autodetect_avconv(args.avconv)
+    print("Using avconv {}".format(avconv))
+    def _cb(r):
+        f_source, success, output = r
+        print('='*78)
+        if success:
+            print("COMPLETED: {}".format(f_source))
+        else:
+            print("FAILED: {}".format(f_source))
+        if len(output) > 0:
+            print("OUTPUT:\n{}".format(str(output)))
+        print('='*78)
+        print()
+    def _ecb(e):
+        raise e
+    with ThreadPool() as pool:
+        for s in args.sources:
+            for job in jobs(s, clobber=args.delete):
+                job_type, f_source, f_dest = job
+                if job_type == 't':
+                    # print("ASYNC {}".format(str(job)))
+                    pool.apply_async(
+                        subp_transcode, 
+                        (f_source, f_dest),
+                        dict(avconv=avconv, lame_vbr_quality=args.quality),
+                        _cb, _ecb
+                    )
+                    # subp_transcode(
+                    #     f_source, f_dest, 
+                    #     avconv=avconv, lame_vbr_quality=args.quality
+                    # )
+
+                elif job_type == 'c':
+                    # print("NOW   {}".format(str(job)))
+                    print("'{}' -> '{}'".format(f_source, f_dest))
+                    if os.path.isdir(f_source):
+                        shutil.copytree(f_source, f_dest)
+                    else:
+                        shutil.copy2(f_source, f_dest)
+                else:
+                    raise RuntimeError("Unknown job type '{}'".format(job_type))
+        print()
+        pool.close()
+        pool.join()
+
+
 
