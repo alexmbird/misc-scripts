@@ -87,6 +87,9 @@ def subp_transcode(f_source, f_dest, avconv='/usr/local/bin/ffmpeg', lame_vbr_qu
         raise ValueError("Can only transcode from flac files, not '{}'".format(f_source))
     if not f_dest.lower().endswith('.mp3'):
         raise ValueError("Can only transcode to mp3 files, not '{}'".format(f_dest))
+    comment = "encoder=lame; vbr={}".format(
+        lame_vbr_quality
+    )
     p_args = [
         avconv,
         '-y',
@@ -97,7 +100,8 @@ def subp_transcode(f_source, f_dest, avconv='/usr/local/bin/ffmpeg', lame_vbr_qu
         '-q:a', str(lame_vbr_quality),
         '-map_metadata', '0',
         '-id3v2_version', '3',
-         '-write_id3v1', '1',
+        '-write_id3v1', '1',
+        '-metadata', 'comment={}'.format(comment),
         f_dest
     ]
     # print("'{}' => '{}'".format(f_source, f_dest))
