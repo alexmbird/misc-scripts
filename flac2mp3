@@ -193,8 +193,12 @@ def jobs(source, clobber=False):
 
     
     
-parser = argparse.ArgumentParser(description="""Transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""")
-parser.add_argument('sources', metavar='SOURCE', type=str, nargs='*',
+parser = argparse.ArgumentParser(
+    description="""Transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""",
+    epilog="""Quality notes: default is VBR 3 which is fine for most music, particularly electronic.  For the most detailed kinds of music you'll want 2 or even 1, which disables LAME's -Y option.\nSee http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information."""
+)
+
+parser.add_argument('sources', metavar='SOURCE', type=str, nargs='+',
                     help='flac files or album dirs to transcode')
 parser.add_argument('--delete', '-d', action='store_const', 
                     const=True, default=False,
