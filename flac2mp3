@@ -22,7 +22,7 @@ NO_COPY_EXTS = ('.log', '.cue', 'm3u')
 
 # Default LAME quality setting - 0 is best, 9 is worst.  0-3 are considered 
 # transparent.
-DEFAULT_VBR_QUAL = 3   # Use 1-2 for particularly complex music
+DEFAULT_VBR_QUAL = 2   # Use 0-1 for particularly complex music
 
 
 
@@ -195,7 +195,7 @@ def jobs(source, clobber=False):
     
 parser = argparse.ArgumentParser(
     description="""Transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""",
-    epilog="""Quality notes: default is VBR 3 which is fine for most music, particularly electronic.  For the most detailed kinds of music you'll want 2 or even 1, which disables LAME's -Y option.\nSee http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information."""
+    epilog="""Quality notes: default is VBR 2 - transparent for most music, particularly electronic.  For the most detailed kinds of music try 1 or even 0.\nSee http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information."""
 )
 
 parser.add_argument('sources', metavar='SOURCE', type=str, nargs='+',
