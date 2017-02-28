@@ -160,6 +160,7 @@ def jobs(source, clobber=False):
                     re.sub(r'\.flac$', '.mp3', source, re.IGNORECASE)
         )
     elif os.path.isdir(source):
+        source = source.rstrip('/') # otherwise we get a weird [mp3] dir within
         d_dest = destdir_name(source)
         if os.path.exists(d_dest):
             if clobber:
@@ -230,7 +231,6 @@ if __name__ == '__main__':
         raise e
     with ThreadPool() as pool:
         for s in args.sources:
-            s = s.rstrip('/')   # otherwise we get a weird [mp3] dir within!
             for job in jobs(s, clobber=args.delete):
                 job_type, f_source, f_dest = job
                 if job_type == 't':
@@ -241,13 +241,8 @@ if __name__ == '__main__':
                         dict(avconv=avconv, lame_vbr_quality=args.quality),
                         _cb, _ecb
                     )
-                    # subp_transcode(
-                    #     f_source, f_dest, 
-                    #     avconv=avconv, lame_vbr_quality=args.quality
-                    # )
-
                 elif job_type == 'c':
-                    # print("NOW   {}".format(str(job)))
+                    # print("SYNC  {}".format(str(job)))
                     print("'{}' -> '{}'".format(f_source, f_dest))
                     if os.path.isdir(f_source):
                         shutil.copytree(f_source, f_dest)
