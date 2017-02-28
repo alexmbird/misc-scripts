@@ -116,6 +116,9 @@ def subp_transcode(f_source, f_dest, avconv='/usr/local/bin/ffmpeg', lame_vbr_qu
     return (f_source, True, output)
 
 
+# Use this for finding/replacing flac in dir names
+RE_FLAC = re.compile(r'\Wflac\W', re.IGNORECASE)
+
 def destdir_name(d_source):
     """Generate a destination directory name for the converted album, with
     'mp3' somewhere in it.
@@ -128,10 +131,8 @@ def destdir_name(d_source):
     """
     source_dir_dir  = os.path.dirname(d_source)
     source_dir_name = os.path.basename(d_source)
-    if '[flac]' in source_dir_name.lower():
-        new_dir_name = re.sub(r'\[flac\]', '[mp3]', source_dir_name, re.IGNORECASE)
-    elif '(flac)' in source_dir_name.lower():
-        new_dir_name = re.sub(r'\(flac\)', '(mp3)', source_dir_name, re.IGNORECASE)
+    if RE_FLAC.search(source_dir_name):
+        new_dir_name = RE_FLAC.sub('[mp3]', source_dir_name)
     else:
         new_dir_name = "{} [mp3]".format(source_dir_name)
     return os.path.join(source_dir_dir, new_dir_name)
@@ -195,7 +196,7 @@ def jobs(source, clobber=False):
     
 parser = argparse.ArgumentParser(
     description="""Transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""",
-    epilog="""Quality notes: default is VBR 2 - transparent for most music, particularly electronic.  For the most detailed kinds of music try 1 or even 0.\nSee http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information."""
+    epilog="""Quality notes: default is VBR 2 - transparent for most music.  For electronic music you can get away with lower settings (e.g. 3-4) which discard more high-frequency data.\nSee http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information."""
 )
 
 parser.add_argument('sources', metavar='SOURCE', type=str, nargs='+',
@@ -229,6 +230,7 @@ if __name__ == '__main__':
         raise e
     with ThreadPool() as pool:
         for s in args.sources:
+            s = s.rstrip('/')   # otherwise we get a weird [mp3] dir within!
             for job in jobs(s, clobber=args.delete):
                 job_type, f_source, f_dest = job
                 if job_type == 't':
