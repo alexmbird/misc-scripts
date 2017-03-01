@@ -112,7 +112,7 @@ def subp_transcode(f_source, f_dest, avconv='/usr/local/bin/ffmpeg', lame_vbr_qu
             stdin=subprocess.DEVNULL,
             stderr=subprocess.STDOUT
         )
-    except CalledProcessError as e:
+    except subprocess.CalledProcessError as e:
         return (f_source, False, e.output)
     finally:
         if os.path.isfile(f_dest):
