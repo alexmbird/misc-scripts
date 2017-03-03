@@ -58,12 +58,13 @@ A wrapper script around the [borg](http://borgbackup.readthedocs.io/) backup too
 
 ### flac2mp3
 
-Convert individual flac files or a directory full of them into mp3s using ffmpeg/avconv.
+Convert individual flac files or a directory full of them into <strike>mp3s</strike> mp3 or [opus](http://opus-codec.org/) using ffmpeg/avconv.
 
 *  Preserves tags &amp; filesystem metadata
 *  Preserves cover art &amp; other files 
 *  ...but does not preserve `.cur` and `.log` files, since they belong in flac-land
-*  LAME is singlethreaded, so uses a Python ThreadPool to run as many in parallel as you have cores for a huge speedup.
+*  Encoders are mostly singlethreaded, so uses a Python ThreadPool to run as many in parallel as you have cores for a huge speedup.
+*  Supports the new [opus](http://opus-codec.org/) codec, giving better compression &amp; higher quality than mp3.
 
 Requires Python 3.4+.
 

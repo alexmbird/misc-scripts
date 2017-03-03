@@ -22,7 +22,187 @@ NO_COPY_EXTS = ('.log', '.cue', 'm3u')
 
 # Default LAME quality setting - 0 is best, 9 is worst.  0-3 are considered 
 # transparent.
-DEFAULT_VBR_QUAL = 2   # Use 0-1 for particularly complex music
+DEFAULT_QUAL = 2   # Use 0-1 for particularly complex music
+
+
+
+
+
+class Transcoder(object):
+    
+    # Output files get this extension
+    EXTENSION='___'
+    DEFAULT_QUALITY='_'
+    
+    @classmethod
+    def transcode(cls, f_source, f_dest, quality=None, avconv='/usr/local/bin/ffmpeg'):
+        """Transcode a source FLAC
+        
+        Args:
+            f_source:
+            f_dest:
+            quality:  optional; codec-specific quality setting
+            avconv:   optional; where to find a ffmpeg/avconv binary
+        
+        Raises:
+        
+        Returns:
+            Tuple of (source path, bool success, dest path)
+        """
+        # print("In transcode()")
+        # print("  SRC '{}'".format(f_source))
+        # print("  DST '{}'".format(f_dest))
+
+        # In this base method we simply sanity-check the arguments
+        if not isinstance(f_source, str):
+            raise TypeError("f_source must be a str")
+        if not isinstance(f_dest, str):
+            raise TypeError("f_dest must be a str")
+        if not f_source.lower().endswith('.flac'):
+            raise ValueError("Can only transcode from flac files, not '{}'".format(f_source))
+        if not f_dest.lower().endswith('.'+cls.EXTENSION):
+            raise ValueError("Can only transcode to {} files".format(cls.EXTENSION))
+
+    
+    @classmethod
+    def renameFile(cls, path):
+        return re.sub(r'\.flac$', '.'+cls.EXTENSION, path, re.IGNORECASE)
+    
+
+class TranscoderLame(Transcoder):
+    
+    EXTENSION='mp3'
+    DEFAULT_QUALITY=2
+    
+    @classmethod
+    def transcode(cls, f_source, f_dest, quality=None, avconv='/usr/local/bin/ffmpeg'):
+        """Use avconv/ffmpeg to transcode a flac file into an mp3 with the supplied
+        quality settings.
+        
+        Args:
+            f_source:  source file, which must be flac
+            f_dest:    dest file, which must be mp3
+            avconv:    path to avconv/ffmpeg binary
+            quality:   optional; VBR setting passed to LAME encoder.  0 is best.
+        
+        Raises:
+            TypeError:  f_source or f_dest wasn't a string
+            ValueError: supplied sources were of the wrong file type
+            IOError:    dest path is not a directory / couldn't be created
+            
+        Returns:
+            Tuple of (f_source, success, output)
+        """
+        super(TranscoderLame,cls).transcode(f_source, f_dest)
+        if quality is None:
+            quality = cls.DEFAULT_QUALITY
+        comment = "encoder=ffmpeg+libmp3lame; vbr={}".format(
+            quality
+        )
+        # See http://ffmpeg.org/ffmpeg-codecs.html#libmp3lame-1
+        p_args = [
+            avconv,
+            '-y',
+            '-i', f_source,
+            '-loglevel', 'error',
+            '-c:v', 'copy',
+            '-codec:a', 'libmp3lame',
+            '-q:a', str(quality),
+            '-map_metadata', '0',
+            '-id3v2_version', '3',
+            '-write_id3v1', '1',
+            '-metadata', 'comment={}'.format(comment),
+            f_dest
+        ]
+        # print("'{}' => '{}'".format(f_source, f_dest))
+        # Rewrite this to use subprocess.run() once Python 3.5 is more common
+        try:
+            output = subprocess.check_output(
+                p_args,
+                stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT
+            )
+        except subprocess.CalledProcessError as e:
+            return (f_source, False, e.output)
+        finally:
+            if os.path.isfile(f_dest):
+                shutil.copystat(f_source, f_dest)
+        return (f_source, True, output)
+
+
+class TranscoderOpus(Transcoder):
+    
+    EXTENSION='opus'
+    DEFAULT_QUALITY='128k'
+    
+    @classmethod
+    def transcode(cls, f_source, f_dest, quality=None, avconv='/usr/local/bin/ffmpeg'):
+        """Use avconv/ffmpeg to transcode a flac file into an mp3 with the supplied
+        quality settings.
+        
+        Args:
+            f_source:  source file, which must be flac
+            f_dest:    dest file, which must be mp3
+            avconv:    path to avconv/ffmpeg binary
+            quality:   VBR setting passed to LAME encoder.  0 is best.
+        
+        Raises:
+            TypeError:  f_source or f_dest wasn't a string
+            ValueError: supplied sources were of the wrong file type
+            IOError:    dest path is not a directory / couldn't be created
+            
+        Returns:
+            Tuple of (f_source, success, output)
+        """
+        super(TranscoderOpus,cls).transcode(f_source, f_dest)
+        if quality is None:
+            quality = cls.DEFAULT_QUALITY
+        comment = "encoder=ffmpeg+libopus; vbr={}".format(
+            quality
+        )
+        # See http://ffmpeg.org/ffmpeg-codecs.html#libopus-1
+        # See https://wiki.xiph.org/OpusFAQ
+        p_args = [
+            avconv,
+            '-y',
+            '-i', f_source,
+            '-loglevel', 'error',
+            '-c:v', 'copy',
+            '-codec:a', 'libopus',
+            '-vbr', 'on',
+            '-compression_level', '10', # Slowest encode, highest quality
+            # '-frame_duration', '20',
+            # '-q:a', str(quality),
+            '-b:a', str(quality),
+            '-map_metadata', '0',
+            '-id3v2_version', '3',
+            '-write_id3v1', '1',
+            '-metadata', 'comment={}'.format(comment),
+            f_dest
+        ]
+        # print("'{}' => '{}'".format(f_source, f_dest))
+        # Rewrite this to use subprocess.run() once Python 3.5 is more common
+        try:
+            output = subprocess.check_output(
+                p_args,
+                stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT
+            )
+        except subprocess.CalledProcessError as e:
+            return (f_source, False, e.output)
+        finally:
+            if os.path.isfile(f_dest):
+                shutil.copystat(f_source, f_dest)
+        return (f_source, True, output)
+
+
+
+
+
+TRANSCODER_MAP = {
+    'mp3': TranscoderLame,
+    'opus': TranscoderOpus
+}
 
 
 
@@ -58,72 +238,13 @@ def autodetect_avconv(force=None):
 
 
 
-def subp_transcode(f_source, f_dest, avconv='/usr/local/bin/ffmpeg', lame_vbr_quality=3):
-    """Use avconv/ffmpeg to transcode a flac file into an mp3 with the supplied
-    quality settings.
-    
-    Args:
-        f_source:         source file, which must be flac
-        f_dest:           dest file, which must be mp3
-        avconv:           path to avconv/ffmpeg binary
-        lame_vbr_quality: VBR setting passed to encoder.  0 is best.
-    
-    Raises:
-        TypeError:  f_source or f_dest wasn't a string
-        ValueError: supplied sources were of the wrong file type
-        IOError:    dest path is not a directory / couldn't be created
-        
-    Returns:
-        Tuple of (f_source, success, output)
-    """
-    # print("In subp_transcode()")
-    # print("  SRC '{}'".format(f_source))
-    # print("  DST '{}'".format(f_dest))
-    if not isinstance(f_source, str):
-        raise TypeError("f_source must be a str")
-    if not isinstance(f_dest, str):
-        raise TypeError("f_dest must be a str")
-    if not f_source.lower().endswith('.flac'):
-        raise ValueError("Can only transcode from flac files, not '{}'".format(f_source))
-    if not f_dest.lower().endswith('.mp3'):
-        raise ValueError("Can only transcode to mp3 files, not '{}'".format(f_dest))
-    comment = "encoder=lame; vbr={}".format(
-        lame_vbr_quality
-    )
-    p_args = [
-        avconv,
-        '-y',
-        '-i', f_source,
-        '-loglevel', 'error',
-        '-c:v', 'copy',
-        '-codec:a', 'libmp3lame',
-        '-q:a', str(lame_vbr_quality),
-        '-map_metadata', '0',
-        '-id3v2_version', '3',
-        '-write_id3v1', '1',
-        '-metadata', 'comment={}'.format(comment),
-        f_dest
-    ]
-    # print("'{}' => '{}'".format(f_source, f_dest))
-    # Rewrite this to use subprocess.run() once Python 3.5 is more common
-    try:
-        output = subprocess.check_output(
-            p_args,
-            stdin=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT
-        )
-    except subprocess.CalledProcessError as e:
-        return (f_source, False, e.output)
-    finally:
-        if os.path.isfile(f_dest):
-            shutil.copystat(f_source, f_dest)
-    return (f_source, True, output)
+
 
 
 # Use this for finding/replacing flac in dir names
 RE_FLAC = re.compile(r'\Wflac\W', re.IGNORECASE)
 
-def destdir_name(d_source):
+def destdir_name(d_source, extension):
     """Generate a destination directory name for the converted album, with
     'mp3' somewhere in it.
     
@@ -136,19 +257,20 @@ def destdir_name(d_source):
     source_dir_dir  = os.path.dirname(d_source)
     source_dir_name = os.path.basename(d_source)
     if RE_FLAC.search(source_dir_name):
-        new_dir_name = RE_FLAC.sub('[mp3]', source_dir_name)
+        new_dir_name = RE_FLAC.sub('[{}]'.format(extension), source_dir_name)
     else:
-        new_dir_name = "{} [mp3]".format(source_dir_name)
+        new_dir_name = "{} [{}]".format(source_dir_name, extension)
     return os.path.join(source_dir_dir, new_dir_name)
 
 
     
-def jobs(source, clobber=False):
+def jobs(source, transcoder, clobber=False):
     """Yield a stream of jobs to do for a given file/album.  Create dest
     dir if necessary.
     
     Args:
-        source: 
+        source:     string name for file or directory
+        transcoder: a Transcoder object implementing a transcode() classmethod
     
     Raises:
         IOError: source is not a directory or flac file
@@ -159,13 +281,13 @@ def jobs(source, clobber=False):
         is where it ends up.
     """
     if os.path.isfile(source) and source.lower().endswith('.flac'):
-        yield (     't',
+        yield (     transcoder.transcode,
                     source,
-                    re.sub(r'\.flac$', '.mp3', source, re.IGNORECASE)
+                    transcoder.renameFile(source)
         )
     elif os.path.isdir(source):
         source = source.rstrip('/') # otherwise we get a weird [mp3] dir within
-        d_dest = destdir_name(source)
+        d_dest = destdir_name(source, transcoder.EXTENSION)
         if os.path.exists(d_dest):
             if clobber:
                 print("Dest dir '{}' already exists; deleting".format(d_dest))
@@ -181,11 +303,11 @@ def jobs(source, clobber=False):
             elif path.lower().endswith(NO_COPY_EXTS):
                 continue
             elif os.path.isfile(f_source) and path.lower().endswith('.flac'):
-                yield (     't',
+                yield (     transcoder.transcode,
                             f_source,
                             os.path.join(
                                 d_dest,
-                                re.sub(r'\.flac$', '.mp3', path, re.IGNORECASE)
+                                transcoder.renameFile(path)
                             )
                 )
             else:
@@ -201,7 +323,12 @@ def jobs(source, clobber=False):
     
 parser = argparse.ArgumentParser(
     description="""Transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""",
-    epilog="""Quality notes: default is VBR 2 - transparent for most music.  For electronic music you can get away with lower settings (e.g. 3-4) which discard more high-frequency data.\nSee http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information."""
+    epilog="""Quality Notes
+    
+For 'lame' default is VBR 2 - transparent for most music.  For electronic music you can get away with lower settings (e.g. 3-4) which discard more high-frequency data.  See http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information.
+
+For 'opus' default is 128k, reckoned 'very close to transparency'.  160k or 192k should be perfect; values upto 510k accepted.
+"""
 )
 
 parser.add_argument('sources', metavar='SOURCE', type=str, nargs='+',
@@ -211,14 +338,19 @@ parser.add_argument('--delete', '-d', action='store_const',
                     help="delete any existing destination dirs")
 parser.add_argument('--avconv', '-a', type=str,
                     help='force avconv/ffmpeg binary')
-parser.add_argument('--quality', '-q', type=int, action='store',
-                    default=DEFAULT_VBR_QUAL,
-                    help='LAME VBR quality setting - 0 is best')
-                    
+parser.add_argument('--quality', '-q', type=str, action='store',
+                    default=None,
+                    help='quality setting - codec-dependent')
+parser.add_argument('--format', '-f', type=str, action='store',
+                    choices=['mp3', 'opus'],
+                    default='mp3',
+                    help='output format; default is mp3')
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
     avconv = autodetect_avconv(args.avconv)
+    transcoder = TRANSCODER_MAP[args.format]
     print("Using avconv {}".format(avconv))
     def _cb(r):
         f_source, success, output = r
@@ -235,23 +367,26 @@ if __name__ == '__main__':
         raise e
     with ThreadPool() as pool:
         for s in args.sources:
-            for job in jobs(s, clobber=args.delete):
+            for job in jobs(s, transcoder=transcoder, clobber=args.delete):
+                if 'DEBUG' in os.environ:
+                    print(str(job))
+                    continue
                 job_type, f_source, f_dest = job
-                if job_type == 't':
-                    # print("ASYNC {}".format(str(job)))
-                    pool.apply_async(
-                        subp_transcode, 
-                        (f_source, f_dest),
-                        dict(avconv=avconv, lame_vbr_quality=args.quality),
-                        _cb, _ecb
-                    )
-                elif job_type == 'c':
+                if job_type == 'c':
                     # print("SYNC  {}".format(str(job)))
                     print("'{}' -> '{}'".format(f_source, f_dest))
                     if os.path.isdir(f_source):
                         shutil.copytree(f_source, f_dest)
                     else:
                         shutil.copy2(f_source, f_dest)
+                elif callable(job_type):
+                    # print("ASYNC {}".format(str(job)))
+                    pool.apply_async(
+                        job_type,
+                        (f_source, f_dest),
+                        dict(avconv=avconv, quality=args.quality),
+                        _cb, _ecb
+                    )
                 else:
                     raise RuntimeError("Unknown job type '{}'".format(job_type))
         print()
