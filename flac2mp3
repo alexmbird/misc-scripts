@@ -236,8 +236,8 @@ class TranscoderOpus(Transcoder):
             # '-q:a', str(quality),
             '-b:a', str(quality),
             '-map_metadata', '0',
-            '-id3v2_version', '3',
-            '-write_id3v1', '1',
+            # '-id3v2_version', '3',
+            # '-write_id3v1', '1',
             '-metadata', 'comment={}'.format(comment),
             f_dest
         ]
