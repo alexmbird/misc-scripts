@@ -20,7 +20,7 @@ AVCONV_NAMES = (
 
 
 # These are meaningless after transcoding; don't copy them
-NO_COPY_EXTS = ('.log', '.cue', 'm3u')
+NO_COPY_EXTS = ('.log', '.cue', '.m3u', '.md5')
 
 
 # Default LAME quality setting - 0 is best, 9 is worst.  0-3 are considered 
