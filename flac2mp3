@@ -84,15 +84,32 @@ class Transcoder(object):
         Returns:
             string to use for a new directory name
         """
-        print("quality={}".format(quality))
-        fmt_str = '{}_{}'.format(cls.EXTENSION, quality) if quality else cls.EXTENSION
+        fmt = cls.formatFormat(quality)
         source_dir_dir  = os.path.dirname(path)
         source_dir_name = os.path.basename(path)
         if cls.RE_FLAC.search(source_dir_name):
-            new_dir_name = cls.RE_FLAC.sub('[{}]'.format(fmt_str), source_dir_name)
+            new_dir_name = cls.RE_FLAC.sub('[{}]'.format(fmt), source_dir_name)
         else:
-            new_dir_name = "{} [{}]".format(source_dir_name, fmt_str)
+            new_dir_name = "{} [{}]".format(source_dir_name, fmt)
         return os.path.join(source_dir_dir, new_dir_name)
+    
+    
+    @classmethod
+    def formatFormat(cls, q):
+        """Return a string representing the format+quality, suitable for use in
+        directory names.
+        
+        Args:
+            q:  string quality
+        
+        Returns:
+            str suitable for dir name, e.g. 'mp3_vbr2', 'opus_128k'
+        """
+        if q:
+            return "{}_{}".format(cls.EXTENSION, q)
+        else:
+            return cls.EXTENSION
+
 
 
 class TranscoderLame(Transcoder):
@@ -154,6 +171,24 @@ class TranscoderLame(Transcoder):
             if os.path.isfile(f_dest):
                 shutil.copystat(f_source, f_dest)
         return (f_source, True, output)
+    
+    
+    @classmethod
+    def formatFormat(cls, q):
+        """Return a string representing the format+quality, suitable for use in
+        directory names.
+        
+        Args:
+            q:  string quality
+        
+        Returns:
+            str suitable for dir name, e.g. 'mp3_vbr2', 'opus_128k'
+        """
+        return "{}_vbr{}".format(cls.EXTENSION, q)
+
+
+    
+
 
 
 class TranscoderOpus(Transcoder):
@@ -220,6 +255,7 @@ class TranscoderOpus(Transcoder):
             if os.path.isfile(f_dest):
                 shutil.copystat(f_source, f_dest)
         return (f_source, True, output)
+
 
 
 
