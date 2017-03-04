@@ -287,6 +287,8 @@ def jobs(source, transcoder, clobber=False, quality=''):
         transcode or 'c' for copy, f_source is the path to be copied and f_dest
         is where it ends up.
     """
+    if not quality:
+        quality = transcoder.DEFAULT_QUALITY
     if os.path.isfile(source) and source.lower().endswith('.flac'):
         yield (     transcoder.transcode,
                     source,
