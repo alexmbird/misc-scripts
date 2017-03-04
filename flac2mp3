@@ -37,6 +37,10 @@ class Transcoder(object):
     EXTENSION='___'
     DEFAULT_QUALITY='_'
     
+    # True:  only one transcode at a time.
+    # False: run as many in parallel as we have cpus
+    MULTITHREADED=True
+    
     @classmethod
     def transcode(cls, f_source, f_dest, quality=None, ffmpeg='/usr/local/bin/ffmpeg'):
         """Transcode a source FLAC
@@ -119,6 +123,7 @@ class TranscoderLame(Transcoder):
     
     EXTENSION='mp3'
     DEFAULT_QUALITY=2
+    MULTITHREADED=False
     
     @classmethod
     def transcode(cls, f_source, f_dest, quality=None, ffmpeg='/usr/local/bin/ffmpeg'):
@@ -198,6 +203,9 @@ class TranscoderOpus(Transcoder):
     
     EXTENSION='opus'
     DEFAULT_QUALITY='128k'
+    
+    MULTITHREADED=False   # Seems to have limited multithreading but won't use
+                          # all cores.
     
     @classmethod
     def transcode(cls, f_source, f_dest, quality=None, ffmpeg='/usr/local/bin/ffmpeg'):
@@ -416,7 +424,8 @@ if __name__ == '__main__':
         print()
     def _ecb(e):
         raise e
-    with ThreadPool() as pool:
+    workers = 1 if transcoder.MULTITHREADED else os.cpu_count()
+    with ThreadPool(processes=workers) as pool:
         for s in args.sources:
             for job in jobs(s, transcoder=transcoder, clobber=args.delete, quality=args.quality):
                 if 'DEBUG' in os.environ:
