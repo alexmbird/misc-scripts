@@ -204,8 +204,8 @@ class TranscoderOpus(Transcoder):
     EXTENSION='opus'
     DEFAULT_QUALITY='128k'
     
-    MULTITHREADED=False   # Seems to have limited multithreading but won't use
-                          # all cores.
+    # Seems to have limited multithreading but won't use all cores
+    MULTITHREADED=False
     
     @classmethod
     def transcode(cls, f_source, f_dest, quality=None, ffmpeg='/usr/local/bin/ffmpeg'):
