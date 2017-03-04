@@ -13,7 +13,10 @@ directory handling.  Metadata will be preserved at both the audio and filesystem
 levels."""
 
 # Binary names we might expect to find ffmpeg/avconv with
-AVCONV_NAMES = ('avconv', 'ffmpeg')
+AVCONV_NAMES = (
+    # 'avconv',
+    'ffmpeg',
+)
 
 
 # These are meaningless after transcoding; don't copy them
@@ -35,14 +38,14 @@ class Transcoder(object):
     DEFAULT_QUALITY='_'
     
     @classmethod
-    def transcode(cls, f_source, f_dest, quality=None, avconv='/usr/local/bin/ffmpeg'):
+    def transcode(cls, f_source, f_dest, quality=None, ffmpeg='/usr/local/bin/ffmpeg'):
         """Transcode a source FLAC
         
         Args:
             f_source:
             f_dest:
             quality:  optional; codec-specific quality setting
-            avconv:   optional; where to find a ffmpeg/avconv binary
+            ffmpeg:   optional; where to find a ffmpeg binary
         
         Raises:
         
@@ -118,14 +121,14 @@ class TranscoderLame(Transcoder):
     DEFAULT_QUALITY=2
     
     @classmethod
-    def transcode(cls, f_source, f_dest, quality=None, avconv='/usr/local/bin/ffmpeg'):
-        """Use avconv/ffmpeg to transcode a flac file into an mp3 with the supplied
+    def transcode(cls, f_source, f_dest, quality=None, ffmpeg='/usr/local/bin/ffmpeg'):
+        """Use ffmpeg to transcode a flac file into an mp3 with the supplied
         quality settings.
         
         Args:
             f_source:  source file, which must be flac
             f_dest:    dest file, which must be mp3
-            avconv:    path to avconv/ffmpeg binary
+            ffmpeg:    path to ffmpeg binary
             quality:   optional; VBR setting passed to LAME encoder.  0 is best.
         
         Raises:
@@ -144,7 +147,7 @@ class TranscoderLame(Transcoder):
         )
         # See http://ffmpeg.org/ffmpeg-codecs.html#libmp3lame-1
         p_args = [
-            avconv,
+            ffmpeg,
             '-y',
             '-i', f_source,
             '-loglevel', 'error',
@@ -197,14 +200,14 @@ class TranscoderOpus(Transcoder):
     DEFAULT_QUALITY='128k'
     
     @classmethod
-    def transcode(cls, f_source, f_dest, quality=None, avconv='/usr/local/bin/ffmpeg'):
-        """Use avconv/ffmpeg to transcode a flac file into an mp3 with the supplied
+    def transcode(cls, f_source, f_dest, quality=None, ffmpeg='/usr/local/bin/ffmpeg'):
+        """Use ffmpeg to transcode a flac file into an mp3 with the supplied
         quality settings.
         
         Args:
             f_source:  source file, which must be flac
             f_dest:    dest file, which must be mp3
-            avconv:    path to avconv/ffmpeg binary
+            ffmpeg:    path to ffmpeg binary
             quality:   VBR setting passed to LAME encoder.  0 is best.
         
         Raises:
@@ -224,7 +227,7 @@ class TranscoderOpus(Transcoder):
         # See http://ffmpeg.org/ffmpeg-codecs.html#libopus-1
         # See https://wiki.xiph.org/OpusFAQ
         p_args = [
-            avconv,
+            ffmpeg,
             '-y',
             '-i', f_source,
             '-loglevel', 'error',
@@ -236,8 +239,8 @@ class TranscoderOpus(Transcoder):
             # '-q:a', str(quality),
             '-b:a', str(quality),
             '-map_metadata', '0',
-            # '-id3v2_version', '3',
-            # '-write_id3v1', '1',
+            '-id3v2_version', '3',
+            '-write_id3v1', '1',
             '-metadata', 'comment={}'.format(comment),
             f_dest
         ]
@@ -269,14 +272,14 @@ TRANSCODER_MAP = {
 
 
 
-def autodetect_avconv(force=None):
-    """Search $PATH to find an avconv/ffmpeg binary
+def autodetect_ffmpeg(force=None):
+    """Search $PATH to find an ffmpeg binary
     
     Args:
         None
     
     Raises:
-        IOError - Couldn't find any executable avconv/ffmpeg
+        IOError - Couldn't find any executable ffmpeg
     
     Returns:
         string location of binary
@@ -293,7 +296,7 @@ def autodetect_avconv(force=None):
         raise IOError("Can't find executables for {}".format('/'.join(paths)))
     if force is not None:
         if not _match(force):
-            raise IOError("Forced avconv binary {} is missing/noexec".format(force))
+            raise IOError("Forced ffmpeg binary {} is missing/noexec".format(force))
         return force
     else:
         return _find(AVCONV_NAMES, _match)
@@ -368,12 +371,14 @@ def jobs(source, transcoder, clobber=False, quality=''):
     
     
 parser = argparse.ArgumentParser(
-    description="""Transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""",
+    description="""Use ffmpeg to transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""",
     epilog="""Quality Notes
     
 For 'lame' default is VBR 2 - transparent for most music.  For electronic music you can get away with lower settings (e.g. 3-4) which discard more high-frequency data.  See http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information.
 
 For 'opus' default is 128k, reckoned 'very close to transparency'.  160k or 192k should be perfect; values upto 510k accepted.
+
+Only ffmpeg is supported.  In `avconv` the -map_metadata option appears broken for opus.
 """
 )
 
@@ -382,8 +387,8 @@ parser.add_argument('sources', metavar='SOURCE', type=str, nargs='+',
 parser.add_argument('--delete', '-d', action='store_const', 
                     const=True, default=False,
                     help="delete any existing destination dirs")
-parser.add_argument('--avconv', '-a', type=str,
-                    help='force avconv/ffmpeg binary')
+parser.add_argument('--ffmpeg', '-a', type=str,
+                    help='force ffmpeg binary')
 parser.add_argument('--quality', '-q', type=str, action='store',
                     default=None,
                     help='quality setting - codec-dependent')
@@ -395,9 +400,9 @@ parser.add_argument('--format', '-f', type=str, action='store',
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    avconv = autodetect_avconv(args.avconv)
+    ffmpeg = autodetect_ffmpeg(args.ffmpeg)
     transcoder = TRANSCODER_MAP[args.format]
-    print("Using avconv {}".format(avconv))
+    print("Using ffmpeg {}".format(ffmpeg))
     def _cb(r):
         f_source, success, output = r
         print('='*78)
@@ -430,7 +435,7 @@ if __name__ == '__main__':
                     pool.apply_async(
                         job_type,
                         (f_source, f_dest),
-                        dict(avconv=avconv, quality=args.quality),
+                        dict(ffmpeg=ffmpeg, quality=args.quality),
                         _cb, _ecb
                     )
                 else:
