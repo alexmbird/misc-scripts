@@ -68,6 +68,32 @@ class Transcoder(object):
     def renameFile(cls, path):
         return re.sub(r'\.flac$', '.'+cls.EXTENSION, path, re.IGNORECASE)
     
+    
+    # Use this for finding/replacing flac in dir names
+    RE_FLAC = re.compile(r'\Wflac\W', re.IGNORECASE)
+    
+    @classmethod
+    def renameDir(cls, path, quality=''):
+        """Generate a destination directory name for the converted album, with
+        'mp3' somewhere in it.
+        
+        Args:
+            path:    string directory name
+            quality: optional, str encoder quality
+        
+        Returns:
+            string to use for a new directory name
+        """
+        print("quality={}".format(quality))
+        fmt_str = '{}_{}'.format(cls.EXTENSION, quality) if quality else cls.EXTENSION
+        source_dir_dir  = os.path.dirname(path)
+        source_dir_name = os.path.basename(path)
+        if cls.RE_FLAC.search(source_dir_name):
+            new_dir_name = cls.RE_FLAC.sub('[{}]'.format(fmt_str), source_dir_name)
+        else:
+            new_dir_name = "{} [{}]".format(source_dir_name, fmt_str)
+        return os.path.join(source_dir_dir, new_dir_name)
+
 
 class TranscoderLame(Transcoder):
     
@@ -241,37 +267,18 @@ def autodetect_avconv(force=None):
 
 
 
-# Use this for finding/replacing flac in dir names
-RE_FLAC = re.compile(r'\Wflac\W', re.IGNORECASE)
-
-def destdir_name(d_source, extension):
-    """Generate a destination directory name for the converted album, with
-    'mp3' somewhere in it.
-    
-    Args:
-        d_source: string directory name
-    
-    Returns:
-        string to use for a new directory name
-    """
-    source_dir_dir  = os.path.dirname(d_source)
-    source_dir_name = os.path.basename(d_source)
-    if RE_FLAC.search(source_dir_name):
-        new_dir_name = RE_FLAC.sub('[{}]'.format(extension), source_dir_name)
-    else:
-        new_dir_name = "{} [{}]".format(source_dir_name, extension)
-    return os.path.join(source_dir_dir, new_dir_name)
 
 
     
-def jobs(source, transcoder, clobber=False):
+def jobs(source, transcoder, clobber=False, quality=''):
     """Yield a stream of jobs to do for a given file/album.  Create dest
     dir if necessary.
     
     Args:
         source:     string name for file or directory
         transcoder: a Transcoder object implementing a transcode() classmethod
-    
+        quality:    str quality for encoder; added to audio format str
+        
     Raises:
         IOError: source is not a directory or flac file
     
@@ -287,7 +294,8 @@ def jobs(source, transcoder, clobber=False):
         )
     elif os.path.isdir(source):
         source = source.rstrip('/') # otherwise we get a weird [mp3] dir within
-        d_dest = destdir_name(source, transcoder.EXTENSION)
+        # d_dest = destdir_name(source, transcoder.EXTENSION)
+        d_dest = transcoder.renameDir(source, quality)
         if os.path.exists(d_dest):
             if clobber:
                 print("Dest dir '{}' already exists; deleting".format(d_dest))
@@ -367,7 +375,7 @@ if __name__ == '__main__':
         raise e
     with ThreadPool() as pool:
         for s in args.sources:
-            for job in jobs(s, transcoder=transcoder, clobber=args.delete):
+            for job in jobs(s, transcoder=transcoder, clobber=args.delete, quality=args.quality):
                 if 'DEBUG' in os.environ:
                     print(str(job))
                     continue
