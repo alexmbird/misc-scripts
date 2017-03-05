@@ -373,7 +373,7 @@ def jobs(source, transcoder, clobber=False, quality=''):
                             os.path.join(d_dest, path)
                 )
     else:
-        raise IOError("Target '{}' was neither a flac file nor directory")
+        raise IOError("Target '{}' was neither a flac file nor directory".format(source))
 
 
     
