@@ -22,6 +22,9 @@ AVCONV_NAMES = (
 # These are meaningless after transcoding; don't copy them
 NO_COPY_EXTS = ('.log', '.cue', '.m3u', '.md5')
 
+# These extensions will be transcoded
+AUDIO_EXTS = ('.flac', '.wav', '.mp3', '.mp4', '.ogg')
+
 
 # Default LAME quality setting - 0 is best, 9 is worst.  0-3 are considered 
 # transparent.
@@ -65,15 +68,15 @@ class Transcoder(object):
             raise TypeError("f_source must be a str")
         if not isinstance(f_dest, str):
             raise TypeError("f_dest must be a str")
-        if not f_source.lower().endswith('.flac'):
-            raise ValueError("Can only transcode from flac files, not '{}'".format(f_source))
+        if not f_source.lower().endswith(AUDIO_EXTS):
+            raise ValueError("Can only transcode from audio files, not '{}'".format(f_source))
         if not f_dest.lower().endswith('.'+cls.EXTENSION):
             raise ValueError("Can only transcode to {} files".format(cls.EXTENSION))
 
     
     @classmethod
     def renameFile(cls, path):
-        return re.sub(r'\.flac$', '.'+cls.EXTENSION, path, re.IGNORECASE)
+        return re.sub(r'\..*$', '.'+cls.EXTENSION, path, re.IGNORECASE)
     
     
     # Use this for finding/replacing flac in dir names
@@ -202,7 +205,7 @@ class TranscoderLame(Transcoder):
 class TranscoderOpus(Transcoder):
     
     EXTENSION='opus'
-    DEFAULT_QUALITY='128k'
+    DEFAULT_QUALITY='140k'    # Almost transparent; 128k wasn't quite enough
     
     # Seems to have limited multithreading but won't use all cores
     MULTITHREADED=False
@@ -336,7 +339,7 @@ def jobs(source, transcoder, clobber=False, quality=''):
     """
     if not quality:
         quality = transcoder.DEFAULT_QUALITY
-    if os.path.isfile(source) and source.lower().endswith('.flac'):
+    if os.path.isfile(source) and source.lower().endswith(AUDIO_EXTS):
         yield (     transcoder.transcode,
                     source,
                     transcoder.renameFile(source)
@@ -359,7 +362,7 @@ def jobs(source, transcoder, clobber=False, quality=''):
                 continue
             elif path.lower().endswith(NO_COPY_EXTS):
                 continue
-            elif os.path.isfile(f_source) and path.lower().endswith('.flac'):
+            elif os.path.isfile(f_source) and path.lower().endswith(AUDIO_EXTS):
                 yield (     transcoder.transcode,
                             f_source,
                             os.path.join(
