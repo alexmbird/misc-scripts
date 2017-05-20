@@ -33,6 +33,9 @@ DEFAULT_QUAL = 2   # Use 0-1 for particularly complex music
 
 
 
+class InvalidQualityError(Exception):
+    """Bad quality setting"""
+
 
 class Transcoder(object):
     
@@ -119,7 +122,18 @@ class Transcoder(object):
             return "{}_{}".format(cls.EXTENSION, q)
         else:
             return cls.EXTENSION
-
+    
+    @classmethod
+    def checkQuality(cls, q):
+        """Check the supplied quality setting is valid for this transcoder
+        
+        Args: 
+            q:  string quality
+        
+        Raises:
+            InvalidQualityError - was not a valid quality setting.
+        """
+        pass
 
 
 class TranscoderLame(Transcoder):
@@ -150,6 +164,7 @@ class TranscoderLame(Transcoder):
         super(TranscoderLame,cls).transcode(f_source, f_dest)
         if quality is None:
             quality = cls.DEFAULT_QUALITY
+            
         comment = "encoder=ffmpeg+libmp3lame; vbr={}".format(
             quality
         )
@@ -197,6 +212,19 @@ class TranscoderLame(Transcoder):
         """
         return "{}_vbr{}".format(cls.EXTENSION, q)
 
+
+    @classmethod
+    def checkQuality(cls, q):
+        """Check the supplied quality setting is valid for this transcoder
+        
+        Args: 
+            q:  string quality
+        
+        Raises:
+            InvalidQualityError - was not a valid quality setting.
+        """
+        if not ( q.isdigit() and 0 <= int(q) <= 9 ):
+            raise InvalidQualityError("Quality must be integer between 0 and 9 incl.")
 
     
 
@@ -270,6 +298,19 @@ class TranscoderOpus(Transcoder):
                 shutil.copystat(f_source, f_dest)
         return (f_source, True, output)
 
+
+    @classmethod
+    def checkQuality(cls, q):
+        """Check the supplied quality setting is valid for this transcoder
+        
+        Args: 
+            q:  string quality
+        
+        Raises:
+            InvalidQualityError - was not a valid quality setting.
+        """
+        if not ( q.endswith('k') and q[:-1].isdigit() ):
+            raise InvalidQualityError("Quality must be a bitrate - e.g. 96k, 192k")
 
 
 
@@ -414,6 +455,11 @@ if __name__ == '__main__':
     ffmpeg = autodetect_ffmpeg(args.ffmpeg)
     transcoder = TRANSCODER_MAP[args.format]
     print("Using ffmpeg {}".format(ffmpeg))
+    if args.quality is not None:
+        try:
+            transcoder.checkQuality(args.quality)
+        except InvalidQualityError as e:
+            sys.exit("Invalid quality setting '%s' for %s: %s" % (args.quality, transcoder, str(e)))
     def _cb(r):
         f_source, success, output = r
         print('='*78)
