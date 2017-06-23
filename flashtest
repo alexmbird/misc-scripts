@@ -141,7 +141,7 @@ class TestCheckBlock(unittest.TestCase):
 def gen_filenames(count=None):
     """Generate a predictable sequence of filenames"""
     if count is None:
-        count == sys.maxsize
+        count = sys.maxsize
     spec = "ft{:08d}.dat"
     for n in range(0, count):
         yield spec.format(n+1)
