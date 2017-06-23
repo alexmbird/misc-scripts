@@ -68,3 +68,15 @@ Convert individual flac files or a directory full of them into <strike>mp3s</str
 
 Requires Python 3.4+.
 
+
+### flashtest
+
+Test flash media by writing & validating random files.
+
+Counterfeit flash media typically fakes its size by overwriting existing blocks.  This means writes succeed, and you only discover something is wrong when you later try to read your data.  Flashtest fills your device with checksummed, random files then re-reads them to validate the expected data can be read. Checksumming happens at (write) block and file level, meaning we'll catch messed-up blocks and also files with valid-but-exchanged blocks. 
+
+Also useful for detecting genuine-but-worn-out media. 
+
+No warranty is given but it works for me. Be aware that repeatedly writing to flash wears it out.
+
+Requires Python 3+

@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+
+
+"""Test a flash media device really has the stated capacity"""
+
+import os, sys
+import tempfile
+import hashlib
+import re
+import argparse
+import unittest
+
+ONE_GIGABYTE = 1000000 * 1000
+BLOCK_SIZE   = 2**22
+
+HASH_FUNC = hashlib.sha256
+
+# Determine how many bytes are needed at start of block for the hash
+m = HASH_FUNC()
+m.update(b'whatever')
+HASH_LEN = len(m.digest())
+
+
+class InvalidBlock(Exception):
+    """Block payload didn't match hash"""
+
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
+    
+
+
+BLOCK_UNITS = {None: 1, 'b':1, 'k': 2**10, 'm': 2**20, 'g':2**30}
+RE_SIZE_STR = re.compile(r'^(\d+)(\w*)$')
+def parse_size(s):
+    """Parse strings like '4M', '512k' into an integer"""
+    m = RE_SIZE_STR.search(s)
+    if not m:
+        raise ValueError("Couldn't parse size")
+    u = m.group(2).lower() if m.group(2) else None
+    try:
+        return int(m.group(1)) * BLOCK_UNITS[u]
+    except KeyError:
+        raise ValueError("Unknown unit suffix")
+
+
+class ParseSizeAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, int(parse_size(values)))
+
+
+class TestParseSize(unittest.TestCase):
+    
+    def test_invalid_size(self):
+        "Parse invalid sizes"
+        with self.assertRaises(ValueError):
+            parse_size('')
+        with self.assertRaises(ValueError):
+            parse_size('4mm')
+        with self.assertRaises(ValueError):
+            parse_size('-1')
+    
+    def test_valid_size(self):
+        "Parse valid sizes"
+        self.assertEqual(parse_size('0'),    0)
+        self.assertEqual(parse_size('512'),  512)
+        self.assertEqual(parse_size('1k'),   1024)
+        self.assertEqual(parse_size('1M'),   1048576)
+        self.assertEqual(parse_size('1g'),   1073741824)
+        
+
+
+def gen_block(size):
+    """Generate a block of random payload + checksum `length` bytes long"""
+    if size <= HASH_LEN:
+        raise InvalidBlock("Can't generate a block with no payload")
+    r = os.urandom(size-HASH_LEN)
+    m = HASH_FUNC()
+    m.update(r)
+    return m.digest() + r
+
+
+class TestGenBlock(unittest.TestCase):
+    
+    def test_short_block(self):
+        "Generate too-short block"
+        with self.assertRaises(InvalidBlock):
+            gen_block(0)
+        with self.assertRaises(InvalidBlock):
+            gen_block(-1)
+        with self.assertRaises(InvalidBlock):
+            gen_block(HASH_LEN)
+    
+    def test_valid_block(self):
+        "Generate valid block"
+        b = gen_block(HASH_LEN+1)
+        self.assertEqual(len(b), HASH_LEN+1)
+        b = gen_block(4096)
+        self.assertEqual(len(b), 4096)
+        b = gen_block(2**22)
+        self.assertEqual(len(b), 2**22)
+        
+
+
+def check_block(b):
+    """Test a block to see if data matches the initial hash"""
+    if len(b) < HASH_LEN:
+        raise InvalidBlock("Block cannot be shorter than its own hash")
+    m = HASH_FUNC()
+    m.update(b[HASH_LEN:])
+    if m.digest() == b[:HASH_LEN]:
+        return True
+    raise InvalidBlock("Block content didn't match hash")
+
+
+class TestCheckBlock(unittest.TestCase):
+
+    def test_short_block(self):
+        "Check too-short block"
+        with self.assertRaises(InvalidBlock):
+            check_block(b'')
+        with self.assertRaises(InvalidBlock):
+            check_block(b'abcde')
+        with self.assertRaises(InvalidBlock):
+            check_block(b'\x00' * HASH_LEN)
+        
+    def test_valid_block(self):
+        "Detect valid block"
+        b = gen_block(BLOCK_SIZE)
+        self.assertEqual(check_block(b), True)
+
+    def test_invalid_block(self):
+        "Detect invalid block"
+        b = b'\x00' * BLOCK_SIZE   # Correct length, all nulls
+        with self.assertRaises(InvalidBlock):
+            check_block(b)
+
+
+
+def gen_filenames(count=None):
+    """Generate a predictable sequence of filenames"""
+    if count is None:
+        count == sys.maxsize
+    spec = "ft{:08d}.dat"
+    for n in range(0, count):
+        yield spec.format(n+1)
+
+
+def fill_media(block_size, file_size, count=None):
+    """Write files of up to file_size until either count is reached or media
+    is full.  Last file may be less than file_size, but will contain only
+    complete blocks.  Each .dat file is paired with a .hash file containing an
+    overall checksum."""
+    try:
+        for path in gen_filenames(count):
+            m = HASH_FUNC()
+            with open(path, 'wb') as f:
+                print("Writing '%s'" % path)
+                while f.tell() + block_size <= file_size:
+                    orig_pos = f.tell()
+                    b = gen_block(block_size)
+                    try:
+                        size = f.write(b)
+                    except IOError as e:
+                        if e.errno != 28:
+                            raise
+                        f.truncate(orig_pos)
+                        f.flush()
+                        os.fsync(f.fileno())
+                        with open(path.replace('.dat', '.hash'), 'wb') as f:
+                            f.write(m.digest())   # hope there's enough space
+                        return   # media is full
+                    m.update(b)
+                f.flush()
+                os.fsync(f.fileno())
+            with open(path.replace('.dat', '.hash'), 'wb') as f:
+                f.write(m.digest())
+    except IOError as e:
+        eprint("Write failed with ERRNO %s" % (e.errno,))
+        raise
+
+
+def check_media(block_size):
+    for path in sorted(os.listdir('.')):
+        if path.startswith('ft') and path.endswith('.dat'):  # ignore .DS_Store et al
+            print("Checking %s" % (path,))
+            m = HASH_FUNC()
+            with open(path, 'rb') as f:
+                while True:
+                    b = f.read(block_size)
+                    if len(b) == 0:  # EOF
+                        break
+                    elif len(b) != block_size:
+                        sys.exit("Truncated block in %s" % (path,))
+                    try:
+                        check_block(b)
+                    except InvalidBlock as e:
+                        sys.exit("Invalid block in %s" % (path,))
+                    m.update(b)
+            with open(path.replace('.dat', '.hash'), 'rb') as f:
+                if f.read() != m.digest():
+                    sys.exit("File is valid but doesn't match expected overall hash: blocks have been transposed.")
+
+
+
+
+parser = argparse.ArgumentParser(
+    description='Test flash media by writing & validating random files.',
+    epilog="""
+Counterfeit flash media typically fakes its size by overwriting existing blocks.  This means writes succeed, and you only discover something is wrong when you later try to read your data.  Flashtest fills your device with checksummed, random files then re-reads them to validate the expected data can be read. Checksumming happens at (write) block and file level, meaning we'll catch messed-up blocks and also files with valid-but-exchanged blocks. 
+
+Also useful for detecting genuine-but-worn-out media.
+
+No warranty is given but it works for me.  Be aware that repeatedly writing to flash wears it out.
+    """
+)
+parser.add_argument('-b', '--blocksize', dest='blocksize', default=4194304,
+                    action=ParseSizeAction,
+                    help='block size (default 4m) - either an integer byte count or SI unit like 512b, 8k, 16m etc.')
+parser.add_argument('-f', '--filesize', dest='filesize', default=1073741824,
+                    action=ParseSizeAction,
+                    help='file size (default 1g) - either an integer byte count or SI unit like 512b, 8k, 16m etc.')
+parser.add_argument('-c', '--count', dest='count', default=None, type=int,
+                    help='limit written files (default is to fill media)')
+parser.add_argument('-t', '--test', default=False,
+                    action='store_const', const=True,
+                    help='run unit tests')
+parser.add_argument('path', default='.',
+                    help="path to write data, where your flash is mounted")
+
+
+
+
+
+    
+    
+if __name__ == '__main__':
+    args = parser.parse_args()
+    if args.test:
+        unittest.main(argv=sys.argv[0:1])
+        sys.exit()
+    # print(args)
+    with tempfile.TemporaryDirectory(None, 'ftest_', args.path) as temp_dir:
+        print("Testing within %s" % (temp_dir,))
+        orig_dir = os.getcwd()
+        os.chdir(temp_dir)
+        fill_media(block_size=args.blocksize, file_size=args.filesize, count=args.count)
+        check_media(block_size=args.blocksize)
+        os.chdir(orig_dir)   # so temp_dir can be deleted
+    
