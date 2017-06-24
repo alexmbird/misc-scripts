@@ -73,10 +73,12 @@ Requires Python 3.4+.
 
 Test flash media by writing & validating random files.
 
-Counterfeit flash media typically fakes its size by overwriting existing blocks.  This means writes succeed, and you only discover something is wrong when you later try to read your data.  Flashtest fills your device with checksummed, random files then re-reads them to validate the expected data can be read. Checksumming happens at (write) block and file level, meaning we'll catch messed-up blocks and also files with valid-but-exchanged blocks. 
+Counterfeit flash media typically fakes its size by overwriting existing blocks.  This means writes succeed, and you only discover something is wrong when you later try to read your data.  Flashtest fills your device with random files then uses checksums to validate the data can be re-read. 
 
-Also useful for detecting genuine-but-worn-out media. 
+Also useful for detecting genuine-but-worn-out media.
 
-No warranty is given but it works for me. Be aware that repeatedly writing to flash wears it out.
+NB: O_DIRECT is unavailable on OSX.  Thus there's no way (without a `sudo purge`) to fully disable the OS's block cache.  It is assumed that your flash media is sufficiently larger than ram for this not to matter :)
+
+No warranty but it works for me.  Be aware that repeatedly writing to your flash wears it out.
 
 Requires Python 3+
