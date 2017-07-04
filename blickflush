@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# Stop/start Tunnelblick to fix OSX bug
+
+# Change IFACE to match your WiFi interface 
+# (en0 on Macbook Air and Retina, en1 on old Macbook Pros with ethernet) 
+IFACE=en0
+sudo ifconfig $IFACE down
+sudo route flush
+sudo ifconfig $IFACE up
+
