@@ -79,7 +79,7 @@ class Transcoder(object):
     
     @classmethod
     def renameFile(cls, path):
-        return re.sub(r'\..*$', '.'+cls.EXTENSION, path, re.IGNORECASE)
+        return re.sub(r'\..*?$', '.'+cls.EXTENSION, path, re.IGNORECASE)
     
     
     # Use this for finding/replacing flac in dir names
