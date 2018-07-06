@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -euf
+
+docker container prune --force
+docker image prune --force
+
