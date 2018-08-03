@@ -505,6 +505,6 @@ if __name__ == '__main__':
 
         if args.chgrp:
             for source in args.sources:
-                os.system(['chgrp', '-vR', args.chgrp, source])
-                os.system(['chmod', '-R', 'g+wX', args.chgrp, source])
+                subprocess.check_output(['chgrp', '-vR', args.chgrp, source])
+                subprocess.check_output(['chmod', '-R', 'g+wX', args.chgrp, source])
 
