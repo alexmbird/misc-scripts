@@ -51,20 +51,16 @@ container2 output...
 ```
 
 
-### borgmeup
-
-A wrapper script around the [borg](http://borgbackup.readthedocs.io/) backup tool to automate daily/weekly/monthly backups with automatic pruning of outdated archives.
-
-
 ### flac2mp3
 
 Convert individual flac files or a directory full of them into <strike>mp3s</strike> mp3 or [opus](http://opus-codec.org/) using ffmpeg/avconv.
 
 *  Preserves tags &amp; filesystem metadata
-*  Preserves cover art &amp; other files 
+*  Preserves cover art &amp; other files
 *  ...but does not preserve `.cur` and `.log` files, since they belong in flac-land
 *  Encoders are mostly singlethreaded, so uses a Python ThreadPool to run as many in parallel as you have cores for a huge speedup.
 *  Supports the new [opus](http://opus-codec.org/) codec, giving better compression &amp; higher quality than mp3.
+*  Invokes [r128gain](https://pypi.org/project/r128gain/) to add replaygain tags to the transcoded output.
 
 Requires Python 3.4+.
 
@@ -73,7 +69,7 @@ Requires Python 3.4+.
 
 Test flash media by writing & validating random files.
 
-Counterfeit flash media typically fakes its size by overwriting existing blocks.  This means writes succeed, and you only discover something is wrong when you later try to read your data.  Flashtest fills your device with random files then uses checksums to validate the data can be re-read. 
+Counterfeit flash media typically fakes its size by overwriting existing blocks.  This means writes succeed, and you only discover something is wrong when you later try to read your data.  Flashtest fills your device with random files then uses checksums to validate the data can be re-read.
 
 Also useful for detecting genuine-but-worn-out media.
 
