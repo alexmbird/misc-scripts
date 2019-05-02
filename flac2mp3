@@ -31,6 +31,9 @@ AUDIO_EXTS = ('.flac', '.wav', '.mp3', '.mp4', '.ogg')
 DEFAULT_QUAL = 2   # Use 0-1 for particularly complex music
 
 
+# For adding replaygain tags to album
+REPLAYGAIN_CMD = ['r128gain',  '-r', '-a',  '--opus-output-gain']  # + target dir
+
 
 class InvalidQualityError(Exception):
     """Bad quality setting"""
@@ -449,6 +452,8 @@ parser.add_argument('--format', '-f', type=str, action='store',
                     help='output format; default is mp3')
 parser.add_argument('--chgrp', '-g', default=None, type=str,
                     help="chgrp output files to group")
+parser.add_argument('--nogain', action='store_true',
+                    help="disable replaygain for output")
 
 
 if __name__ == '__main__':
@@ -502,6 +507,14 @@ if __name__ == '__main__':
         print()
         pool.close()
         pool.join()
+
+        # Add gain tags to dest dirs
+        if not args.nogain:
+            for s in args.sources:
+                if os.path.isdir(s):
+                    subprocess.check_output(
+                        REPLAYGAIN_CMD + [transcoder.renameDir(s, args.quality)]
+                    )
 
         if args.chgrp:
             for source in args.sources:
