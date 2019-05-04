@@ -466,6 +466,7 @@ if __name__ == '__main__':
             transcoder.checkQuality(args.quality)
         except InvalidQualityError as e:
             sys.exit("Invalid quality setting '%s' for %s: %s" % (args.quality, transcoder, str(e)))
+
     def _cb(r):
         f_source, success, output = r
         print('='*78)
@@ -515,7 +516,8 @@ if __name__ == '__main__':
             target = transcoder.renameDir(s, args.quality)
             if os.path.isdir(target):
                 cmd = [
-                    'r128gain',  '-r', '-a', '--opus-output-gain',
+                    'r128gain', '--ffmpeg-path', ffmpeg,
+                    '-r', '-a', '--opus-output-gain',
                     '-c', str(args.cores), target
                 ]
                 subprocess.check_output(cmd)
