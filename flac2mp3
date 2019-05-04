@@ -31,10 +31,6 @@ AUDIO_EXTS = ('.flac', '.wav', '.mp3', '.mp4', '.ogg')
 DEFAULT_QUAL = 2   # Use 0-1 for particularly complex music
 
 
-# For adding replaygain tags to album
-REPLAYGAIN_CMD = ['r128gain',  '-r', '-a',  '--opus-output-gain']  # + target dir
-
-
 class InvalidQualityError(Exception):
     """Bad quality setting"""
 
@@ -425,7 +421,7 @@ def jobs(source, transcoder, clobber=False, quality=''):
 
 
 parser = argparse.ArgumentParser(
-    description="""Use ffmpeg to transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.""",
+    description="""Use ffmpeg to transcode flac files into mp3s while preserving tags, filesystem metadata and non-audio files.  Sources can be either individual flac files or directories containing then, which are recreated with a new name and mp3-ed contents.  By default replaygain tags are added to output files with the external 'r128gain' package.""",
     epilog="""Quality Notes
 
 For 'lame' default is VBR 2 - transparent for most music.  For electronic music you can get away with lower settings (e.g. 3-4) which discard more high-frequency data.  See http://wiki.hydrogenaud.io/index.php?title=LAME#Maximum_quality_and_archiving for more information.
@@ -450,10 +446,12 @@ parser.add_argument('--format', '-f', type=str, action='store',
                     choices=['mp3', 'opus'],
                     default='mp3',
                     help='output format; default is mp3')
-parser.add_argument('--chgrp', '-g', default=None, type=str,
-                    help="chgrp output files to group")
+parser.add_argument('--chown', '-o', default=None, type=str,
+                    help="chown output files to user:group & make group-writable")
 parser.add_argument('--nogain', action='store_true',
-                    help="disable replaygain for output")
+                    help="disable replaygain tagging of output files")
+parser.add_argument('--cores', default=os.cpu_count(), type=int,
+                    help="num of transcoding processes to run")
 
 
 if __name__ == '__main__':
@@ -461,6 +459,8 @@ if __name__ == '__main__':
     ffmpeg = autodetect_ffmpeg(args.ffmpeg)
     transcoder = TRANSCODER_MAP[args.format]
     print("Using ffmpeg {}".format(ffmpeg))
+    cleaned_sources = [s.rstrip('/') for s in args.sources]
+
     if args.quality is not None:
         try:
             transcoder.checkQuality(args.quality)
@@ -477,11 +477,12 @@ if __name__ == '__main__':
             print("OUTPUT:\n{}".format(str(output)))
         print('='*78)
         print()
+
     def _ecb(e):
         raise e
-    workers = 1 if transcoder.MULTITHREADED else os.cpu_count()
-    with ThreadPool(processes=workers) as pool:
-        for s in args.sources:
+
+    with ThreadPool(processes=args.cores) as pool:
+        for s in cleaned_sources:
             for job in jobs(s, transcoder=transcoder, clobber=args.delete, quality=args.quality):
                 if 'DEBUG' in os.environ:
                     print(str(job))
@@ -508,16 +509,20 @@ if __name__ == '__main__':
         pool.close()
         pool.join()
 
-        # Add gain tags to dest dirs
-        if not args.nogain:
-            for s in args.sources:
-                if os.path.isdir(s):
-                    subprocess.check_output(
-                        REPLAYGAIN_CMD + [transcoder.renameDir(s, args.quality)]
-                    )
+    # Add gain tags to dest dirs
+    if not args.nogain:
+        for s in cleaned_sources:
+            target = transcoder.renameDir(s, args.quality)
+            if os.path.isdir(target):
+                cmd = [
+                    'r128gain',  '-r', '-a', '--opus-output-gain',
+                    '-c', str(args.cores), target
+                ]
+                subprocess.check_output(cmd)
 
-        if args.chgrp:
-            for source in args.sources:
-                subprocess.check_output(['chgrp', '-vR', args.chgrp, source])
-                subprocess.check_output(['chmod', '-R', 'g+wX', args.chgrp, source])
-
+    # Change ownership to specified user:group & make group writable
+    if args.chown is not None:
+        for source in cleaned_sources:
+            target = transcoder.renameDir(s, args.quality)
+            subprocess.check_output(['chown', '-vR', args.chown, target])
+            subprocess.check_output(['chmod', '-R', 'ug+wX', target])
