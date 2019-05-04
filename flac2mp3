@@ -106,7 +106,7 @@ class Transcoder(object):
             new_dir_name = cls.RE_FLAC.sub('[{}]'.format(fmt), source_dir_name)
         else:
             new_dir_name = "{} [{}]".format(source_dir_name, fmt)
-        return os.path.join(source_dir_dir, new_dir_name)
+        return os.path.join(source_dir_dir, new_dir_name).rstrip('/')
 
 
     @classmethod
