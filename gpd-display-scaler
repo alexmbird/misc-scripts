@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+# If internal display is present & set to high res, scale it
+if xrandr | egrep --quiet "^eDP1 connected"; then
+  if [ "${PANEL_RESOLUTION}" == "1920x1200" ]; then
+    echo "Resetting GPD panel scale"
+    xrandr --output eDP1 --scale 0.64x0.64
+  fi
+fi
+
+# (re)set external display as 1x1 as scale can be forgotten upon reconnect
+if xrandr | egrep --quiet "^DP1 connected"; then
+  echo "Resetting external display scale"
+  xrandr --output DP1 --scale 1x1
+fi
